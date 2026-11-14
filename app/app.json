@@ -1,0 +1,25 @@
+{
+  "expo": {
+    "name": "QSS Mobile Banking",
+    "slug": "qss-mobile-banking",
+    "version": "0.1.0",
+    "orientation": "portrait",
+    "icon": "./assets/icon.png",
+    "userInterfaceStyle": "light",
+    "platforms": ["android", "ios"],
+    "ios": {
+      "bundleIdentifier": "com.qss.mobilebanking",
+      "supportsTablet": true
+    },
+    "android": {
+      "package": "com.qss.mobilebanking",
+      "adaptiveIcon": {
+        "backgroundColor": "#E6F4FE",
+        "foregroundImage": "./assets/android-icon-foreground.png",
+        "backgroundImage": "./assets/android-icon-background.png",
+        "monochromeImage": "./assets/android-icon-monochrome.png"
+      },
+      "predictiveBackGestureEnabled": false
+    }
+  }
+}
