@@ -9,5 +9,11 @@
 export const ALLOW_UNENCRYPTED_DB =
   __DEV__ && process.env.EXPO_PUBLIC_ALLOW_UNENCRYPTED_DB === 'true';
 
-/** The API in use. Only the in-app mock exists until the core team ships /v1/field. */
-export const API_MODE: 'mock' = 'mock';
+/**
+ * The core banking system's base URL, for example https://staging.example.com.
+ * Set EXPO_PUBLIC_API_URL when building. With no URL the app runs against its
+ * built-in demo data and says so on screen, so a demo build can never be
+ * mistaken for a connected one.
+ */
+export const API_URL: string = (process.env.EXPO_PUBLIC_API_URL ?? '').trim();
+export const API_MODE: 'http' | 'mock' = API_URL ? 'http' : 'mock';

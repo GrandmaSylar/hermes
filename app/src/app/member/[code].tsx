@@ -4,13 +4,13 @@ import { ScrollView, Text, View } from 'react-native';
 import { formatAmount } from '@/domain/money';
 import type { Member } from '@/domain/types';
 import { useApp } from '@/state/AppProvider';
-import { Button, Card, colors } from '@/ui/theme';
+import { Button, Card, balanceText, colors } from '@/ui/theme';
 
-function BalanceRow({ label, value }: { label: string; value: string }) {
+function BalanceRow({ label, value }: { label: string; value: string | null }) {
   return (
     <View style={{ flexDirection: 'row', justifyContent: 'space-between', paddingVertical: 8 }}>
       <Text style={{ color: colors.muted }}>{label}</Text>
-      <Text style={{ color: colors.text, fontWeight: '600' }}>GHS {formatAmount(value)}</Text>
+      <Text style={{ color: colors.text, fontWeight: '600' }}>{balanceText(value, formatAmount)}</Text>
     </View>
   );
 }

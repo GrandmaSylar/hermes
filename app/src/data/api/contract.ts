@@ -27,6 +27,8 @@ export interface ServerMember {
   branchCode: string;
   balances: MemberBalances;
   asOf: string;
+  /** Present when the API can supply it with the member. */
+  savingsAccountId?: number | null;
 }
 
 export interface MemberPage {
@@ -43,6 +45,8 @@ export interface PushItem {
   amount: string;
   reference: string | null;
   collectedAt: string;
+  /** The member's savings account at the core. Required for a savings deposit. */
+  accountId: number | null;
 }
 
 export type PushResultStatus = 'ACCEPTED' | 'DUPLICATE' | 'REJECTED' | 'CONFLICT';
@@ -79,12 +83,50 @@ export interface RegistrationResult {
   reason?: string;
 }
 
+/** A member's savings account at the core system, with its balance. */
+export interface SavingsAccountInfo {
+  memberCode: string;
+  accountId: number;
+  balance: string;
+}
+
+export interface SavingsAccountPage {
+  items: SavingsAccountInfo[];
+  nextCursor: string | null;
+}
+
+/**
+ * What the core system can do for the field channel today. The app hides what
+ * is off, so it never offers an action the core would refuse. Flags turn on as
+ * the core ships support (see docs/core-api-dev-brief.md).
+ */
+export interface ApiCapabilities {
+  /** Sign-in has a second step: an SMS code. */
+  otp: boolean;
+  /** New members can be registered from the field. */
+  registration: boolean;
+  shareContribution: boolean;
+  loanRepayment: boolean;
+}
+
+export type SignInResult =
+  | { kind: 'OTP_REQUIRED'; challengeId: string }
+  | { kind: 'SIGNED_IN'; session: Session };
+
 export interface ApiClient {
-  /** Step 1 of first sign-in on a device: password. Returns an OTP challenge. */
-  login(staffId: string, password: string): Promise<{ challengeId: string }>;
-  /** Step 2: the SMS OTP. Returns the field session. */
+  readonly capabilities: ApiCapabilities;
+  /** Forgets anything held in memory for the signed-in user. Called on sign-out. */
+  reset?(): void;
+  /**
+   * Step 1 of first sign-in on a device: password. Either signs in, or asks
+   * for an SMS code. The device id is sent so the core can check the phone is
+   * registered.
+   */
+  login(staffId: string, password: string, deviceId: string): Promise<SignInResult>;
+  /** Step 2 when the API asks for it: the SMS OTP. Returns the field session. */
   verifyOtp(challengeId: string, otp: string, deviceId: string): Promise<Session>;
   pullMembers(session: Session, cursor: string | null): Promise<MemberPage>;
+  pullSavingsAccounts(session: Session, cursor: string | null): Promise<SavingsAccountPage>;
   pushTransactions(session: Session, items: PushItem[]): Promise<PushResult[]>;
   pushRegistrations(session: Session, items: PushRegistration[]): Promise<RegistrationResult[]>;
   limits(session: Session): Promise<MobilizerLimits>;

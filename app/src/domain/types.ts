@@ -17,10 +17,15 @@ export const PRODUCT_LABELS: Record<ProductType, string> = {
  */
 export type OutboxStatus = 'PENDING' | 'SENDING' | 'SYNCED' | 'REJECTED' | 'CONFLICT';
 
+/**
+ * Balances as last read from the core system. The core's member list has no
+ * balances, so shares and loan are null ("not available") until the core
+ * exposes them for the field channel.
+ */
 export interface MemberBalances {
   savings: string;
-  shares: string;
-  loan: string;
+  shares: string | null;
+  loan: string | null;
 }
 
 export interface Member {
@@ -32,6 +37,8 @@ export interface Member {
   balances: MemberBalances;
   /** When these balances were last refreshed from the core system. */
   asOf: string;
+  /** The member's savings account at the core system. Deposits need it. Null until synced. */
+  savingsAccountId: number | null;
   myCustomer: boolean;
   /** How many items the mobilizer has captured for this member. Drives suggestions. */
   collectCount: number;
@@ -52,6 +59,8 @@ export interface OutboxItem {
   lastError: string | null;
   serverId: string | null;
   createdAt: string;
+  /** The core system's savings account id, copied from the member when the item was captured. */
+  accountId: number | null;
 }
 
 export interface MobilizerLimits {

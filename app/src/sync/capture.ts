@@ -45,6 +45,7 @@ export async function captureCollection(
     reference: input.reference?.trim() ? input.reference.trim() : null,
     collectedAt: stamp,
     createdAt: stamp,
+    accountId: input.member.savingsAccountId,
   };
   await repos.outbox.enqueue(item);
   await repos.members.bumpCollectCount(input.member.memberCode);

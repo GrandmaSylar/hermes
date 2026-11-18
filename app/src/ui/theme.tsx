@@ -25,6 +25,11 @@ export const STATUS_STYLE: Record<OutboxStatus, { label: string; fg: string; bg:
   CONFLICT: { label: 'Needs attention', fg: colors.danger, bg: colors.dangerBg },
 };
 
+/** A balance for display, or a plain note when the core system does not supply it. */
+export function balanceText(value: string | null, format: (amount: string) => string): string {
+  return value === null ? 'Not available' : `GHS ${format(value)}`;
+}
+
 export function Button(props: {
   title: string;
   onPress: () => void;

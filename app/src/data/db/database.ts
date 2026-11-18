@@ -5,7 +5,7 @@ import { ALLOW_UNENCRYPTED_DB } from '@/config';
 
 const DB_NAME = 'qss.db';
 const KEY_NAME = 'qss.db.key';
-const SCHEMA_VERSION = 2;
+const SCHEMA_VERSION = 3;
 
 /** 256-bit random key, created once and kept only in the device keystore. */
 async function getOrCreateKey(): Promise<string> {
@@ -89,6 +89,13 @@ async function migrate(db: SQLite.SQLiteDatabase): Promise<void> {
         );
         CREATE INDEX ix_reg_status ON registrations (status, created_at);
         CREATE INDEX ix_reg_id_number ON registrations (id_number);
+      `);
+    }
+    if (current < 3) {
+      // The core's member list has no savings account id; deposits need it.
+      await db.execAsync(`
+        ALTER TABLE members ADD COLUMN savings_account_id INTEGER;
+        ALTER TABLE outbox ADD COLUMN account_id INTEGER;
       `);
     }
     await db.execAsync(`PRAGMA user_version = ${SCHEMA_VERSION}`);
