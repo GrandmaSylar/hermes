@@ -56,6 +56,29 @@ export interface PushResult {
   reason?: string;
 }
 
+/** A member registration waiting for office approval. Same idempotency rules as PushItem. */
+export interface PushRegistration {
+  localRegistrationId: string;
+  firstName: string;
+  lastName: string;
+  gender: 'F' | 'M';
+  dateOfBirth: string;
+  phone: string;
+  idType: string;
+  idNumber: string;
+  address: string;
+  capturedAt: string;
+}
+
+export interface RegistrationResult {
+  localRegistrationId: string;
+  status: PushResultStatus;
+  /** The office's draft reference. Present for ACCEPTED and DUPLICATE. */
+  serverId?: string;
+  /** Present for REJECTED and CONFLICT. */
+  reason?: string;
+}
+
 export interface ApiClient {
   /** Step 1 of first sign-in on a device: password. Returns an OTP challenge. */
   login(staffId: string, password: string): Promise<{ challengeId: string }>;
@@ -63,5 +86,6 @@ export interface ApiClient {
   verifyOtp(challengeId: string, otp: string, deviceId: string): Promise<Session>;
   pullMembers(session: Session, cursor: string | null): Promise<MemberPage>;
   pushTransactions(session: Session, items: PushItem[]): Promise<PushResult[]>;
+  pushRegistrations(session: Session, items: PushRegistration[]): Promise<RegistrationResult[]>;
   limits(session: Session): Promise<MobilizerLimits>;
 }

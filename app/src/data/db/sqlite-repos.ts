@@ -1,7 +1,16 @@
 import type * as SQLite from 'expo-sqlite';
 import type { ServerMember } from '@/data/api/contract';
-import type { KvRepo, MemberRepo, NewOutboxItem, OutboxRepo, Repos } from '@/data/repositories';
+import type {
+  KvRepo,
+  MemberRepo,
+  NewOutboxItem,
+  NewRegistration,
+  OutboxRepo,
+  RegistrationRepo,
+  Repos,
+} from '@/data/repositories';
 import type { UnsyncedTotals } from '@/domain/capture';
+import type { RegistrationItem } from '@/domain/registration';
 import { toMinor } from '@/domain/money';
 import type { Member, OutboxItem, OutboxStatus, ProductType } from '@/domain/types';
 
@@ -247,6 +256,146 @@ class SqliteOutboxRepo implements OutboxRepo {
   }
 }
 
+interface RegistrationRow {
+  local_reg_id: string;
+  first_name: string;
+  last_name: string;
+  gender: RegistrationItem['gender'];
+  date_of_birth: string;
+  phone: string;
+  id_type: RegistrationItem['idType'];
+  id_number: string;
+  address: string;
+  captured_at: string;
+  status: OutboxStatus;
+  attempts: number;
+  last_error: string | null;
+  server_id: string | null;
+  created_at: string;
+}
+
+const toRegistration = (row: RegistrationRow): RegistrationItem => ({
+  localRegistrationId: row.local_reg_id,
+  firstName: row.first_name,
+  lastName: row.last_name,
+  gender: row.gender,
+  dateOfBirth: row.date_of_birth,
+  phone: row.phone,
+  idType: row.id_type,
+  idNumber: row.id_number,
+  address: row.address,
+  capturedAt: row.captured_at,
+  status: row.status,
+  attempts: row.attempts,
+  lastError: row.last_error,
+  serverId: row.server_id,
+  createdAt: row.created_at,
+});
+
+class SqliteRegistrationRepo implements RegistrationRepo {
+  constructor(private readonly db: SQLite.SQLiteDatabase) {}
+
+  async enqueue(item: NewRegistration): Promise<void> {
+    // INSERT OR IGNORE on the primary key makes a double tap harmless.
+    await this.db.runAsync(
+      `INSERT OR IGNORE INTO registrations
+       (local_reg_id, first_name, last_name, gender, date_of_birth, phone, id_type, id_number, address,
+        captured_at, status, attempts, created_at)
+       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'PENDING', 0, ?)`,
+      item.localRegistrationId,
+      item.firstName,
+      item.lastName,
+      item.gender,
+      item.dateOfBirth,
+      item.phone,
+      item.idType,
+      item.idNumber,
+      item.address,
+      item.capturedAt,
+      item.createdAt,
+    );
+  }
+
+  async list(limit: number): Promise<RegistrationItem[]> {
+    const rows = await this.db.getAllAsync<RegistrationRow>(
+      'SELECT * FROM registrations ORDER BY created_at DESC LIMIT ?',
+      limit,
+    );
+    return rows.map(toRegistration);
+  }
+
+  async due(limit: number): Promise<RegistrationItem[]> {
+    const rows = await this.db.getAllAsync<RegistrationRow>(
+      "SELECT * FROM registrations WHERE status = 'PENDING' ORDER BY created_at ASC LIMIT ?",
+      limit,
+    );
+    return rows.map(toRegistration);
+  }
+
+  async recoverInterrupted(): Promise<void> {
+    await this.db.runAsync("UPDATE registrations SET status = 'PENDING' WHERE status = 'SENDING'");
+  }
+
+  async markSending(ids: string[]): Promise<void> {
+    await this.db.withTransactionAsync(async () => {
+      for (const id of ids) {
+        await this.db.runAsync(
+          "UPDATE registrations SET status = 'SENDING', attempts = attempts + 1 WHERE local_reg_id = ?",
+          id,
+        );
+      }
+    });
+  }
+
+  async applyResult(
+    id: string,
+    status: OutboxStatus,
+    patch: { serverId?: string | null; lastError?: string | null },
+  ): Promise<void> {
+    await this.db.runAsync(
+      'UPDATE registrations SET status = ?, server_id = COALESCE(?, server_id), last_error = ? WHERE local_reg_id = ?',
+      status,
+      patch.serverId ?? null,
+      patch.lastError ?? null,
+      id,
+    );
+  }
+
+  async release(ids: string[]): Promise<void> {
+    await this.db.withTransactionAsync(async () => {
+      for (const id of ids) {
+        await this.db.runAsync(
+          "UPDATE registrations SET status = 'PENDING' WHERE local_reg_id = ? AND status = 'SENDING'",
+          id,
+        );
+      }
+    });
+  }
+
+  async waitingCount(): Promise<number> {
+    const row = await this.db.getFirstAsync<{ n: number }>(
+      "SELECT count(*) AS n FROM registrations WHERE status IN ('PENDING', 'SENDING')",
+    );
+    return row?.n ?? 0;
+  }
+
+  async hasIdNumber(idNumber: string): Promise<boolean> {
+    const row = await this.db.getFirstAsync<{ n: number }>(
+      "SELECT count(*) AS n FROM registrations WHERE id_number = ? AND status <> 'REJECTED'",
+      idNumber,
+    );
+    return (row?.n ?? 0) > 0;
+  }
+
+  async forDay(day: string): Promise<RegistrationItem[]> {
+    const rows = await this.db.getAllAsync<RegistrationRow>(
+      'SELECT * FROM registrations WHERE substr(captured_at, 1, 10) = ? ORDER BY created_at DESC',
+      day,
+    );
+    return rows.map(toRegistration);
+  }
+}
+
 class SqliteKvRepo implements KvRepo {
   constructor(private readonly db: SQLite.SQLiteDatabase) {}
 
@@ -265,5 +414,10 @@ class SqliteKvRepo implements KvRepo {
 }
 
 export function createSqliteRepos(db: SQLite.SQLiteDatabase): Repos {
-  return { members: new SqliteMemberRepo(db), outbox: new SqliteOutboxRepo(db), kv: new SqliteKvRepo(db) };
+  return {
+    members: new SqliteMemberRepo(db),
+    outbox: new SqliteOutboxRepo(db),
+    registrations: new SqliteRegistrationRepo(db),
+    kv: new SqliteKvRepo(db),
+  };
 }

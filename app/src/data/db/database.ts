@@ -5,7 +5,7 @@ import { ALLOW_UNENCRYPTED_DB } from '@/config';
 
 const DB_NAME = 'qss.db';
 const KEY_NAME = 'qss.db.key';
-const SCHEMA_VERSION = 1;
+const SCHEMA_VERSION = 2;
 
 /** 256-bit random key, created once and kept only in the device keystore. */
 async function getOrCreateKey(): Promise<string> {
@@ -68,6 +68,29 @@ async function migrate(db: SQLite.SQLiteDatabase): Promise<void> {
         );
       `);
     }
+    if (current < 2) {
+      await db.execAsync(`
+        CREATE TABLE registrations (
+          local_reg_id  TEXT PRIMARY KEY NOT NULL,
+          first_name    TEXT NOT NULL,
+          last_name     TEXT NOT NULL,
+          gender        TEXT NOT NULL,
+          date_of_birth TEXT NOT NULL,
+          phone         TEXT NOT NULL,
+          id_type       TEXT NOT NULL,
+          id_number     TEXT NOT NULL,
+          address       TEXT NOT NULL,
+          captured_at   TEXT NOT NULL,
+          status        TEXT NOT NULL,
+          attempts      INTEGER NOT NULL DEFAULT 0,
+          last_error    TEXT,
+          server_id     TEXT,
+          created_at    TEXT NOT NULL
+        );
+        CREATE INDEX ix_reg_status ON registrations (status, created_at);
+        CREATE INDEX ix_reg_id_number ON registrations (id_number);
+      `);
+    }
     await db.execAsync(`PRAGMA user_version = ${SCHEMA_VERSION}`);
   });
 }
@@ -104,5 +127,5 @@ export async function openDatabase(): Promise<SQLite.SQLiteDatabase> {
 
 /** Wipes the encryption key and all local data, e.g. on remote kill or sign-out of a device. */
 export async function wipeLocalData(db: SQLite.SQLiteDatabase): Promise<void> {
-  await db.execAsync('DELETE FROM outbox; DELETE FROM members; DELETE FROM kv;');
+  await db.execAsync('DELETE FROM outbox; DELETE FROM registrations; DELETE FROM members; DELETE FROM kv;');
 }

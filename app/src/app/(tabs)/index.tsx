@@ -5,7 +5,7 @@ import { computeDayMetrics, type DayMetrics } from '@/domain/metrics';
 import { formatAmount } from '@/domain/money';
 import type { Member } from '@/domain/types';
 import { useApp } from '@/state/AppProvider';
-import { Card, colors } from '@/ui/theme';
+import { Button, Card, colors } from '@/ui/theme';
 
 const RESULT_LIMIT = 50;
 const today = () => new Date().toISOString().slice(0, 10);
@@ -54,6 +54,7 @@ export default function MembersTab() {
   const [results, setResults] = useState<Member[]>([]);
   const [total, setTotal] = useState(0);
   const [metrics, setMetrics] = useState<DayMetrics | null>(null);
+  const [registered, setRegistered] = useState(0);
   const requestId = useRef(0);
 
   // Wait briefly after typing stops, so each keystroke does not query the database.
@@ -77,8 +78,10 @@ export default function MembersTab() {
       }
       const count = await repos.members.count();
       const day = computeDayMetrics(await repos.outbox.forDay(today()));
+      const regs = (await repos.registrations.forDay(today())).filter((r) => r.status !== 'REJECTED').length;
       // Ignore answers that arrive after a newer search was started.
       if (id !== requestId.current) return;
+      setRegistered(regs);
       setResults(rows);
       setTotal(count);
       setMetrics(day);
@@ -106,8 +109,10 @@ export default function MembersTab() {
               <View style={{ flexDirection: 'row', marginTop: 12 }}>
                 <Stat label="Net cash" value={`GHS ${formatAmount(metrics?.net ?? '0')}`} />
                 <Stat label="Items" value={String(metrics?.count ?? 0)} />
+                <Stat label="Registered" value={String(registered)} />
               </View>
             </Card>
+            <Button title="Register a new member" variant="secondary" onPress={() => router.push('/register')} />
             <TextInput
               value={query}
               onChangeText={setQuery}

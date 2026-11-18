@@ -1,5 +1,6 @@
-import { ApiError, type ApiClient, type PushItem } from '@/data/api/contract';
+import { ApiError, type ApiClient, type PushItem, type PushRegistration } from '@/data/api/contract';
 import type { Repos } from '@/data/repositories';
+import type { RegistrationItem } from '@/domain/registration';
 import type { OutboxItem, Session } from '@/domain/types';
 
 export interface SyncReport {
@@ -9,6 +10,9 @@ export interface SyncReport {
   rejected: number;
   conflicts: number;
   pulledMembers: number;
+  /** Registrations delivered to the office (new or already received). */
+  registrationsSent: number;
+  registrationsRejected: number;
   /** The server could not be reached; items were left waiting. */
   offline: boolean;
   /** The session is no longer valid; the user must sign in again. */
@@ -66,6 +70,8 @@ async function run(deps: SyncDeps): Promise<SyncReport> {
     rejected: 0,
     conflicts: 0,
     pulledMembers: 0,
+    registrationsSent: 0,
+    registrationsRejected: 0,
     offline: false,
     authError: false,
   };
@@ -74,6 +80,9 @@ async function run(deps: SyncDeps): Promise<SyncReport> {
 
   try {
     await repos.outbox.recoverInterrupted();
+    await repos.registrations.recoverInterrupted();
+
+    await pushRegistrations(deps, report, batchSize);
 
     for (;;) {
       const batch = await repos.outbox.due(batchSize);
@@ -127,6 +136,68 @@ async function run(deps: SyncDeps): Promise<SyncReport> {
     else throw error;
   }
   return report;
+}
+
+function toPushRegistration(r: RegistrationItem): PushRegistration {
+  return {
+    localRegistrationId: r.localRegistrationId,
+    firstName: r.firstName,
+    lastName: r.lastName,
+    gender: r.gender,
+    dateOfBirth: r.dateOfBirth,
+    phone: r.phone,
+    idType: r.idType,
+    idNumber: r.idNumber,
+    address: r.address,
+    capturedAt: r.capturedAt,
+  };
+}
+
+/** Same delivery rules as collections: idempotent, resumable, and never lost on a network failure. */
+async function pushRegistrations(deps: SyncDeps, report: SyncReport, batchSize: number): Promise<void> {
+  const { repos, api, session } = deps;
+  for (;;) {
+    const batch = await repos.registrations.due(batchSize);
+    if (batch.length === 0) return;
+    const ids = batch.map((r) => r.localRegistrationId);
+    await repos.registrations.markSending(ids);
+
+    let results;
+    try {
+      results = await api.pushRegistrations(session, batch.map(toPushRegistration));
+    } catch (error) {
+      await repos.registrations.release(ids);
+      throw error;
+    }
+
+    const answered = new Set<string>();
+    for (const result of results) {
+      answered.add(result.localRegistrationId);
+      switch (result.status) {
+        case 'ACCEPTED':
+        case 'DUPLICATE':
+          report.registrationsSent += 1;
+          await repos.registrations.applyResult(result.localRegistrationId, 'SYNCED', {
+            serverId: result.serverId ?? null,
+            lastError: null,
+          });
+          break;
+        case 'REJECTED':
+          report.registrationsRejected += 1;
+          await repos.registrations.applyResult(result.localRegistrationId, 'REJECTED', { lastError: result.reason ?? 'Rejected.' });
+          break;
+        case 'CONFLICT':
+          report.registrationsRejected += 1;
+          await repos.registrations.applyResult(result.localRegistrationId, 'CONFLICT', { lastError: result.reason ?? 'Conflict.' });
+          break;
+      }
+    }
+    const unanswered = ids.filter((id) => !answered.has(id));
+    if (unanswered.length > 0) {
+      await repos.registrations.release(unanswered);
+      return;
+    }
+  }
 }
 
 async function pullMembersIfStale(deps: SyncDeps, report: SyncReport): Promise<void> {

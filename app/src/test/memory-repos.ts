@@ -1,6 +1,15 @@
 import type { ServerMember } from '@/data/api/contract';
-import type { KvRepo, MemberRepo, NewOutboxItem, OutboxRepo, Repos } from '@/data/repositories';
+import type {
+  KvRepo,
+  MemberRepo,
+  NewOutboxItem,
+  NewRegistration,
+  OutboxRepo,
+  RegistrationRepo,
+  Repos,
+} from '@/data/repositories';
 import type { UnsyncedTotals } from '@/domain/capture';
+import type { RegistrationItem } from '@/domain/registration';
 import { toMinor } from '@/domain/money';
 import type { Member, OutboxItem, OutboxStatus } from '@/domain/types';
 
@@ -101,6 +110,58 @@ class MemoryOutbox implements OutboxRepo {
   }
 }
 
+class MemoryRegistrations implements RegistrationRepo {
+  readonly rows = new Map<string, RegistrationItem>();
+
+  async enqueue(item: NewRegistration) {
+    if (this.rows.has(item.localRegistrationId)) return;
+    this.rows.set(item.localRegistrationId, { ...item, status: 'PENDING', attempts: 0, lastError: null, serverId: null });
+  }
+  async list(limit: number) {
+    return [...this.rows.values()].sort((a, b) => b.createdAt.localeCompare(a.createdAt)).slice(0, limit);
+  }
+  async due(limit: number) {
+    return [...this.rows.values()]
+      .filter((r) => r.status === 'PENDING')
+      .sort((a, b) => a.createdAt.localeCompare(b.createdAt))
+      .slice(0, limit);
+  }
+  async recoverInterrupted() {
+    for (const r of this.rows.values()) if (r.status === 'SENDING') r.status = 'PENDING';
+  }
+  async markSending(ids: string[]) {
+    for (const id of ids) {
+      const r = this.rows.get(id);
+      if (r) {
+        r.status = 'SENDING';
+        r.attempts += 1;
+      }
+    }
+  }
+  async applyResult(id: string, status: OutboxStatus, patch: { serverId?: string | null; lastError?: string | null }) {
+    const r = this.rows.get(id);
+    if (!r) return;
+    r.status = status;
+    r.serverId = patch.serverId ?? r.serverId;
+    r.lastError = patch.lastError ?? null;
+  }
+  async release(ids: string[]) {
+    for (const id of ids) {
+      const r = this.rows.get(id);
+      if (r && r.status === 'SENDING') r.status = 'PENDING';
+    }
+  }
+  async waitingCount() {
+    return [...this.rows.values()].filter((r) => r.status === 'PENDING' || r.status === 'SENDING').length;
+  }
+  async hasIdNumber(idNumber: string) {
+    return [...this.rows.values()].some((r) => r.idNumber === idNumber && r.status !== 'REJECTED');
+  }
+  async forDay(day: string) {
+    return [...this.rows.values()].filter((r) => r.capturedAt.slice(0, 10) === day);
+  }
+}
+
 class MemoryKv implements KvRepo {
   readonly rows = new Map<string, string>();
   async get(key: string) {
@@ -114,9 +175,15 @@ class MemoryKv implements KvRepo {
 export interface MemoryRepos extends Repos {
   members: MemoryMembers;
   outbox: MemoryOutbox;
+  registrations: MemoryRegistrations;
   kv: MemoryKv;
 }
 
 export function createMemoryRepos(): MemoryRepos {
-  return { members: new MemoryMembers(), outbox: new MemoryOutbox(), kv: new MemoryKv() };
+  return {
+    members: new MemoryMembers(),
+    outbox: new MemoryOutbox(),
+    registrations: new MemoryRegistrations(),
+    kv: new MemoryKv(),
+  };
 }

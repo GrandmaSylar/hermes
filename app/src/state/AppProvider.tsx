@@ -155,7 +155,7 @@ export function AppProvider({ children }: { children: ReactNode }) {
       // still waiting to sync, so cash entries are never lost by accident.
       if (!force && repos) {
         const unsynced = await repos.outbox.unsyncedTotals();
-        if (unsynced.count > 0) return false;
+        if (unsynced.count > 0 || (await repos.registrations.waitingCount()) > 0) return false;
       }
       await clearSession();
       if (dbRef.current) await wipeLocalData(dbRef.current);

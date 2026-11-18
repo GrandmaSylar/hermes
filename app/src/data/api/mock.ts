@@ -5,7 +5,9 @@ import {
   type ApiClient,
   type MemberPage,
   type PushItem,
+  type PushRegistration,
   type PushResult,
+  type RegistrationResult,
   type ServerMember,
 } from './contract';
 
@@ -126,6 +128,40 @@ export class MockApi implements ApiClient {
   async pushTransactions(session: Session, items: PushItem[]): Promise<PushResult[]> {
     this.guard();
     return items.map((item) => this.accept(session, item));
+  }
+
+  private readonly registrationsSeen = new Map<string, { fingerprint: string; serverId: string }>();
+  private readonly registeredIds = new Set<string>();
+  private nextDraftId = 1;
+
+  async pushRegistrations(session: Session, items: PushRegistration[]): Promise<RegistrationResult[]> {
+    this.guard();
+    return items.map((item) => this.acceptRegistration(session, item));
+  }
+
+  private acceptRegistration(session: Session, item: PushRegistration): RegistrationResult {
+    const id = item.localRegistrationId;
+    const key = `${session.deviceId}:${id}`;
+    const fingerprint = [item.firstName, item.lastName, item.dateOfBirth, item.phone, item.idType, item.idNumber].join('|');
+    const existing = this.registrationsSeen.get(key);
+    if (existing) {
+      return existing.fingerprint === fingerprint
+        ? { localRegistrationId: id, status: 'DUPLICATE', serverId: existing.serverId }
+        : { localRegistrationId: id, status: 'CONFLICT', reason: 'This registration was already received with different details.' };
+    }
+    // The core system refuses a second member with the same ID number.
+    const idKey = `${item.idType}:${item.idNumber}`;
+    if (this.registeredIds.has(idKey)) {
+      return {
+        localRegistrationId: id,
+        status: 'REJECTED',
+        reason: 'A member with this ID number is already registered or waiting for approval.',
+      };
+    }
+    this.registeredIds.add(idKey);
+    const serverId = `MD-${String(this.nextDraftId++).padStart(6, '0')}`;
+    this.registrationsSeen.set(key, { fingerprint, serverId });
+    return { localRegistrationId: id, status: 'ACCEPTED', serverId };
   }
 
   private accept(session: Session, item: PushItem): PushResult {
