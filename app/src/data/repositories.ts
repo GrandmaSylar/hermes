@@ -1,6 +1,7 @@
 import type { ServerMember } from './api/contract';
 import type { Member, OutboxItem, OutboxStatus } from '@/domain/types';
 import type { UnsyncedTotals } from '@/domain/capture';
+import type { RegistrationItem } from '@/domain/registration';
 
 /**
  * Storage interfaces. The app uses the SQLite (SQLCipher) implementation; the
@@ -46,6 +47,29 @@ export interface OutboxRepo {
   forDay(day: string): Promise<OutboxItem[]>;
 }
 
+export type NewRegistration = Omit<RegistrationItem, 'status' | 'attempts' | 'lastError' | 'serverId'>;
+
+/** Registrations follow the same outbox life cycle as collections. */
+export interface RegistrationRepo {
+  enqueue(item: NewRegistration): Promise<void>;
+  list(limit: number): Promise<RegistrationItem[]>;
+  due(limit: number): Promise<RegistrationItem[]>;
+  recoverInterrupted(): Promise<void>;
+  markSending(ids: string[]): Promise<void>;
+  applyResult(
+    id: string,
+    status: OutboxStatus,
+    patch: { serverId?: string | null; lastError?: string | null },
+  ): Promise<void>;
+  release(ids: string[]): Promise<void>;
+  /** Registrations not yet delivered (PENDING or SENDING). */
+  waitingCount(): Promise<number>;
+  /** True if this ID number is already in a registration saved on this phone and not rejected. */
+  hasIdNumber(idNumber: string): Promise<boolean>;
+  /** Registrations captured within a UTC day, "YYYY-MM-DD". */
+  forDay(day: string): Promise<RegistrationItem[]>;
+}
+
 export interface KvRepo {
   get(key: string): Promise<string | null>;
   set(key: string, value: string): Promise<void>;
@@ -54,5 +78,6 @@ export interface KvRepo {
 export interface Repos {
   members: MemberRepo;
   outbox: OutboxRepo;
+  registrations: RegistrationRepo;
   kv: KvRepo;
 }

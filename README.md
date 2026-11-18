@@ -25,10 +25,11 @@ This project does not modify or push to `cua-core-api`. The app talks to the cor
 - Sign-in: password, then an SMS OTP (first sign-in on a device); later unlocks use the phone's biometric or screen lock. Real passkeys are a later slice and need the core system's WebAuthn endpoints.
 - Offline-first member search over an encrypted local database (SQLCipher, key kept in the device keystore). The app refuses to store member data if SQLCipher is missing.
 - Cash collection capture (savings deposit, share contribution, loan repayment) saved to an on-device outbox, then synced automatically with idempotent delivery.
+- Field member registration: name, gender, date of birth (18+), mobile number, ID type and number, address. Saved to the same on-device outbox and synced idempotently as a draft for office approval. The member has no member number and cannot transact until approved. The mock refuses a duplicate ID number. ID photo and signature capture are not built yet.
 - Sync screen, "my customers" and frequent members, and provisional daily credits, debits and net cash.
 - All server calls go through `src/data/api/contract.ts`. Today it is implemented by an in-app mock (`src/data/api/mock.ts`) that behaves like the `/v1/field` API specified in `docs/core-api-dev-brief.md`. A real HTTP client replaces it once the core team publishes the OpenAPI spec.
 
-Not built yet: field member registration, passkeys, device enrolment and remote kill, the real API client, receipts printing, reconciliation views.
+Not built yet: ID photo and signature capture for registration, passkeys, device enrolment and remote kill, the real API client, receipts printing, reconciliation views.
 
 ## Run the app
 

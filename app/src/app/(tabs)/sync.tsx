@@ -1,26 +1,32 @@
 import { useEffect, useState } from 'react';
 import { Alert, FlatList, Switch, Text, View } from 'react-native';
 import { formatAmount } from '@/domain/money';
+import { fullName, type RegistrationItem } from '@/domain/registration';
 import { PRODUCT_LABELS, type OutboxItem } from '@/domain/types';
 import { useApp } from '@/state/AppProvider';
 import { Button, Card, StatusPill, colors } from '@/ui/theme';
 
-function describeReport(offline: boolean, authError: boolean, pushed: number, pulled: number): string {
+function describeReport(offline: boolean, authError: boolean, pushed: number, registrations: number, pulled: number): string {
   if (authError) return 'Your session has ended. Sign in again.';
   if (offline) return 'No connection. Items stay safe on this phone and sync automatically.';
-  return `Last sync: ${pushed} sent, ${pulled} members refreshed.`;
+  const regs = registrations > 0 ? `, ${registrations} registration${registrations === 1 ? '' : 's'}` : '';
+  return `Last sync: ${pushed} collection${pushed === 1 ? '' : 's'} sent${regs}, ${pulled} members refreshed.`;
 }
 
 export default function SyncTab() {
   const { repos, version, syncing, syncNow, lastReport, lastSyncAt, simulateOffline, setSimulateOffline, signOut } = useApp();
   const [items, setItems] = useState<OutboxItem[]>([]);
 
+  const [registrations, setRegistrations] = useState<RegistrationItem[]>([]);
+
   useEffect(() => {
     if (!repos) return;
     void repos.outbox.list(100).then(setItems);
+    void repos.registrations.list(50).then(setRegistrations);
   }, [repos, version]);
 
-  const waiting = items.filter((i) => i.status === 'PENDING' || i.status === 'SENDING').length;
+  const isWaiting = (s: OutboxItem['status']) => s === 'PENDING' || s === 'SENDING';
+  const waiting = items.filter((i) => isWaiting(i.status)).length + registrations.filter((r) => isWaiting(r.status)).length;
 
   const confirmSignOut = async () => {
     const done = await signOut();
@@ -43,7 +49,7 @@ export default function SyncTab() {
             <Text style={{ fontSize: 22, fontWeight: '700', color: colors.text }}>{waiting} waiting to sync</Text>
             <Text style={{ color: colors.muted, marginTop: 4 }}>
               {lastReport
-                ? describeReport(lastReport.offline, lastReport.authError, lastReport.pushed, lastReport.pulledMembers)
+                ? describeReport(lastReport.offline, lastReport.authError, lastReport.pushed, lastReport.registrationsSent, lastReport.pulledMembers)
                 : 'Not synced yet in this session.'}
             </Text>
             {lastSyncAt ? <Text style={{ color: colors.muted, marginTop: 2 }}>At {new Date(lastSyncAt).toLocaleTimeString()}</Text> : null}
@@ -61,6 +67,25 @@ export default function SyncTab() {
                 <Switch value={simulateOffline} onValueChange={setSimulateOffline} />
               </View>
             </Card>
+          ) : null}
+
+          {registrations.length > 0 ? (
+            <View style={{ gap: 10 }}>
+              <Text style={{ color: colors.muted, fontSize: 12 }}>MEMBER REGISTRATIONS</Text>
+              {registrations.map((r) => (
+                <Card key={r.localRegistrationId}>
+                  <Text style={{ fontWeight: '600', color: colors.text }}>{fullName(r)}</Text>
+                  <Text style={{ color: colors.muted, marginTop: 2 }}>
+                    {r.phone} · {new Date(r.capturedAt).toLocaleString()}
+                  </Text>
+                  <View style={{ height: 8 }} />
+                  <StatusPill status={r.status} />
+                  {r.serverId ? <Text style={{ color: colors.muted, fontSize: 12, marginTop: 6 }}>Draft reference {r.serverId}</Text> : null}
+                  {r.lastError ? <Text style={{ color: colors.danger, marginTop: 6 }}>{r.lastError}</Text> : null}
+                </Card>
+              ))}
+              <Text style={{ color: colors.muted, fontSize: 12, marginTop: 4 }}>COLLECTIONS</Text>
+            </View>
           ) : null}
         </View>
       }
