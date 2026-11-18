@@ -81,6 +81,18 @@ Field officers are separate from core staff users. They have their own account t
 
 34. Settlement and exception queues, a device and officer dashboard, remote device suspend, and a "pending deposits" line in the member view, separate from the available balance.
 
+### H. Counted-cash reconciliation and posting dates (added 18 Nov 2026)
+
+These refine items 18 to 22 and follow section 5.1 of the requirements spec.
+
+35. **Independent count.** The cashier who receives the cash records the **counted amount**; the mobilizer never supplies it. A reconciliation batch stores: officer, period covered, the staged items it covers, expected total (computed by the system from items that are received or approved and not yet reconciled, excluding rejected and already-reconciled items), counted amount, variance (counted minus expected), receiving cashier, and approver.
+36. **Variance handling.**
+    - Zero variance: a supervisor or accountant approves the batch.
+    - Non-zero variance: the office resolves it item by item (reject or correct with a reason) and the expected total is recomputed. A remaining difference within a **branch till-variance tolerance** (configurable) may be approved and booked to a shortage or overage account, recorded against the officer. Beyond the tolerance the batch is held for investigation.
+37. **Separation of duties.** The approver must not be the officer and must not be the cashier who counted. Compare the **people** behind the accounts (see `linkedUserId` in item 9), not only the account ids, so one person holding both a staff and a field account cannot play both roles.
+38. **Posting through the receiving cashier's till.** On batch approval, items become `RECONCILED` and post through the **receiving cashier's till**, so physical cash and the ledger move together. Items not covered stay unreconciled and count toward the officer's unreconciled-cash ceiling.
+39. **Two dates (question for you, see decision 2 below).** Each item carries the date it was **collected** (device time, plus the server receive time) and the date it is **posted**. Please propose how posting handles collected-before-closure items that are reconciled after end of day or in a closed period (next open day, back-dated with approval, or held in the exception queue), and make the policy configurable. Reports must be able to show both dates.
+
 ## 4. Policies to preserve
 
 - Idempotency key on every money write. Posted records are never edited; corrections are approved reversals.
@@ -92,17 +104,17 @@ Field officers are separate from core staff users. They have their own account t
 ## 5. Decisions needed from the business
 
 1. Who approves, and who settles (teller, supervisor, accountant)?
-2. Items synced after end-of-day closure: post to the next open day, or hold for a decision?
+2. Items synced or reconciled after end-of-day closure: post to the next open day, back-date with approval, or hold for a decision? (See item 39. Collected date and posting date are both kept.)
 3. Does each officer need a till or float account, and on which ledger accounts?
 4. SMS cost control: per-member daily limit, and who bears the cost.
-5. Phone platform: Android only, or Android plus iOS.
+5. ~~Phone platform~~ Decided: Android and iOS (one React Native codebase, no web client). Oldest supported phone: Tecno Spark. Passkey endpoints must therefore work for both platforms' passkey providers.
 6. Maximum offline period and unsynced-item cap per officer.
 
 ## 6. Suggested order
 
 1. Field identity (A) and hardening (B). Both are needed before any money flows.
 2. Intake extension (D) and the `/v1/field` surface (E), so the app team can start against **staging**.
-3. Settlement (C), SMS (F) and the office screens (G).
+3. Settlement (C), counted-cash reconciliation (H), SMS (F) and the office screens (G).
 
 ## 7. Practical needs
 
