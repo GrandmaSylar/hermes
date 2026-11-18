@@ -48,7 +48,7 @@ function MemberRow({ member }: { member: Member }) {
 }
 
 export default function MembersTab() {
-  const { repos, version, session } = useApp();
+  const { repos, version, session, capabilities } = useApp();
   const [query, setQuery] = useState('');
   const [debounced, setDebounced] = useState('');
   const [results, setResults] = useState<Member[]>([]);
@@ -112,7 +112,9 @@ export default function MembersTab() {
                 <Stat label="Registered" value={String(registered)} />
               </View>
             </Card>
-            <Button title="Register a new member" variant="secondary" onPress={() => router.push('/register')} />
+            {capabilities.registration ? (
+              <Button title="Register a new member" variant="secondary" onPress={() => router.push('/register')} />
+            ) : null}
             <TextInput
               value={query}
               onChangeText={setQuery}

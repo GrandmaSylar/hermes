@@ -26,6 +26,9 @@ export function validateCapture(
   if (input.member.status !== 'ACTIVE') {
     return 'This member is not active, so a collection cannot be captured.';
   }
+  if (input.productType === 'SAVINGS_DEPOSIT' && input.member.savingsAccountId == null) {
+    return 'This member has no savings account on this phone yet. Sync, then try again.';
+  }
   if (!input.amount.trim()) return 'Enter the amount.';
   if (!isAmountText(input.amount)) return 'Enter a valid amount with at most two decimals.';
   const minor = toMinor(input.amount);

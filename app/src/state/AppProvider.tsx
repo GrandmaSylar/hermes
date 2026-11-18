@@ -3,8 +3,10 @@ import * as Crypto from 'expo-crypto';
 import type * as SQLite from 'expo-sqlite';
 import { createContext, useCallback, useContext, useEffect, useMemo, useRef, useState, type ReactNode } from 'react';
 import { AppState } from 'react-native';
-import type { ApiClient } from '@/data/api/contract';
+import type { ApiCapabilities, ApiClient } from '@/data/api/contract';
+import { HttpApi } from '@/data/api/http';
 import { MockApi } from '@/data/api/mock';
+import { API_MODE, API_URL } from '@/config';
 import { openDatabase, wipeLocalData } from '@/data/db/database';
 import { createSqliteRepos } from '@/data/db/sqlite-repos';
 import type { Repos } from '@/data/repositories';
@@ -29,7 +31,11 @@ interface AppContextValue {
   simulateOffline: boolean;
   setSimulateOffline: (value: boolean) => void;
   syncNow: () => Promise<SyncReport | null>;
-  signInPassword: (staffId: string, password: string) => Promise<string>;
+  /** The server's answer to a password: null when signed in, or the id of an SMS code challenge. */
+  signInPassword: (staffId: string, password: string) => Promise<string | null>;
+  capabilities: ApiCapabilities;
+  /** 'mock' means demo data: the app is not connected to the core system. */
+  apiMode: 'http' | 'mock';
   signInOtp: (challengeId: string, otp: string) => Promise<void>;
   unlock: () => Promise<boolean>;
   /** Returns false (and does nothing) while items are waiting to sync, unless forced. */
@@ -56,12 +62,28 @@ export function AppProvider({ children }: { children: ReactNode }) {
   const [lastSyncAt, setLastSyncAt] = useState<string | null>(null);
   const [simulateOffline, setSimulateOffline] = useState(false);
 
+  const sessionRef = useRef<Session | null>(null);
+  sessionRef.current = session;
   const dbRef = useRef<SQLite.SQLiteDatabase | null>(null);
   const offlineRef = useRef(false);
   offlineRef.current = simulateOffline;
 
   // One mock API for the life of the app. The simulated-offline switch is read at call time.
-  const api = useMemo<ApiClient>(() => new MockApi({ failNetwork: () => __DEV__ && offlineRef.current }), []);
+  const api = useMemo<ApiClient>(() => {
+    if (API_MODE === 'mock') return new MockApi({ failNetwork: () => __DEV__ && offlineRef.current });
+    return new HttpApi({
+      baseUrl: API_URL,
+      // When the server renews the session, keep the new tokens so the next launch can still sync.
+      onTokens: (tokens) => {
+        const current = sessionRef.current;
+        if (!current) return;
+        const next = { ...current, ...tokens };
+        sessionRef.current = next;
+        setSession(next);
+        void saveSession(next);
+      },
+    });
+  }, []);
 
   const touch = useCallback(() => setVersion((v) => v + 1), []);
 
@@ -128,7 +150,14 @@ export function AppProvider({ children }: { children: ReactNode }) {
   }, [status]);
 
   const signInPassword = useCallback(
-    async (staffId: string, password: string) => (await api.login(staffId, password)).challengeId,
+    async (staffId: string, password: string): Promise<string | null> => {
+      const result = await api.login(staffId, password, await getDeviceId());
+      if (result.kind === 'OTP_REQUIRED') return result.challengeId;
+      await saveSession(result.session);
+      setSession(result.session);
+      setStatus('ready');
+      return null;
+    },
     [api],
   );
 
@@ -158,13 +187,14 @@ export function AppProvider({ children }: { children: ReactNode }) {
         if (unsynced.count > 0 || (await repos.registrations.waitingCount()) > 0) return false;
       }
       await clearSession();
+      api.reset?.();
       if (dbRef.current) await wipeLocalData(dbRef.current);
       setSession(null);
       setStatus('signedOut');
       touch();
       return true;
     },
-    [repos, touch],
+    [repos, touch, api],
   );
 
   const value: AppContextValue = {
@@ -181,6 +211,8 @@ export function AppProvider({ children }: { children: ReactNode }) {
     setSimulateOffline,
     syncNow,
     signInPassword,
+    capabilities: api.capabilities,
+    apiMode: API_MODE,
     signInOtp,
     unlock,
     signOut,

@@ -1,4 +1,4 @@
-import type { ServerMember } from './api/contract';
+import type { SavingsAccountInfo, ServerMember } from './api/contract';
 import type { Member, OutboxItem, OutboxStatus } from '@/domain/types';
 import type { UnsyncedTotals } from '@/domain/capture';
 import type { RegistrationItem } from '@/domain/registration';
@@ -14,6 +14,8 @@ export interface MemberRepo {
   search(query: string, limit: number): Promise<Member[]>;
   get(memberCode: string): Promise<Member | null>;
   count(): Promise<number>;
+  /** Records each member's savings account id and balance. Members not on the phone are ignored. */
+  applySavingsAccounts(accounts: SavingsAccountInfo[]): Promise<void>;
   setMyCustomer(memberCode: string, value: boolean): Promise<void>;
   bumpCollectCount(memberCode: string): Promise<void>;
   /** Members marked "my customers". */

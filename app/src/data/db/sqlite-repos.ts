@@ -1,5 +1,5 @@
 import type * as SQLite from 'expo-sqlite';
-import type { ServerMember } from '@/data/api/contract';
+import type { SavingsAccountInfo, ServerMember } from '@/data/api/contract';
 import type {
   KvRepo,
   MemberRepo,
@@ -26,6 +26,7 @@ interface MemberRow {
   as_of: string;
   my_customer: number;
   collect_count: number;
+  savings_account_id: number | null;
 }
 
 interface OutboxRow {
@@ -41,7 +42,15 @@ interface OutboxRow {
   last_error: string | null;
   server_id: string | null;
   created_at: string;
+  account_id: number | null;
 }
+
+/**
+ * The members table keeps shares and loan as NOT NULL text. An empty string
+ * means "the core did not supply it", which the app shows as not available.
+ */
+const balanceOut = (value: string | null): string => value ?? '';
+const balanceIn = (value: string): string | null => (value === '' ? null : value);
 
 const toMember = (row: MemberRow): Member => ({
   memberCode: row.member_code,
@@ -49,8 +58,9 @@ const toMember = (row: MemberRow): Member => ({
   phone: row.phone,
   status: row.status,
   branchCode: row.branch_code,
-  balances: { savings: row.savings, shares: row.shares, loan: row.loan },
+  balances: { savings: row.savings, shares: balanceIn(row.shares), loan: balanceIn(row.loan) },
   asOf: row.as_of,
+  savingsAccountId: row.savings_account_id,
   myCustomer: row.my_customer === 1,
   collectCount: row.collect_count,
 });
@@ -68,6 +78,7 @@ const toOutbox = (row: OutboxRow): OutboxItem => ({
   lastError: row.last_error,
   serverId: row.server_id,
   createdAt: row.created_at,
+  accountId: row.account_id,
 });
 
 /** Escapes LIKE wildcards so user input is matched literally. */
@@ -79,13 +90,15 @@ class SqliteMemberRepo implements MemberRepo {
   async upsertMany(members: ServerMember[]): Promise<void> {
     if (members.length === 0) return;
     // my_customer and collect_count are local; a refresh must never reset them.
+    // A member refresh with no account id keeps the one already known.
     const statement = await this.db.prepareAsync(`
-      INSERT INTO members (member_code, name, phone, status, branch_code, savings, shares, loan, as_of, search_text)
-      VALUES ($code, $name, $phone, $status, $branch, $savings, $shares, $loan, $asOf, $search)
+      INSERT INTO members (member_code, name, phone, status, branch_code, savings, shares, loan, as_of, search_text, savings_account_id)
+      VALUES ($code, $name, $phone, $status, $branch, $savings, $shares, $loan, $asOf, $search, $account)
       ON CONFLICT(member_code) DO UPDATE SET
         name = excluded.name, phone = excluded.phone, status = excluded.status,
         branch_code = excluded.branch_code, savings = excluded.savings, shares = excluded.shares,
-        loan = excluded.loan, as_of = excluded.as_of, search_text = excluded.search_text
+        loan = excluded.loan, as_of = excluded.as_of, search_text = excluded.search_text,
+        savings_account_id = COALESCE(excluded.savings_account_id, savings_account_id)
     `);
     try {
       await this.db.withTransactionAsync(async () => {
@@ -97,8 +110,9 @@ class SqliteMemberRepo implements MemberRepo {
             $status: m.status,
             $branch: m.branchCode,
             $savings: m.balances.savings,
-            $shares: m.balances.shares,
-            $loan: m.balances.loan,
+            $shares: balanceOut(m.balances.shares),
+            $loan: balanceOut(m.balances.loan),
+            $account: m.savingsAccountId ?? null,
             $asOf: m.asOf,
             $search: `${m.memberCode} ${m.name} ${m.phone}`.toLowerCase(),
           });
@@ -142,6 +156,23 @@ class SqliteMemberRepo implements MemberRepo {
     return row?.n ?? 0;
   }
 
+  async applySavingsAccounts(accounts: SavingsAccountInfo[]): Promise<void> {
+    if (accounts.length === 0) return;
+    const statement = await this.db.prepareAsync(
+      // With several accounts the lowest id wins, so the choice is stable between syncs.
+      'UPDATE members SET savings_account_id = $account, savings = $balance WHERE member_code = $code AND (savings_account_id IS NULL OR savings_account_id >= $account)',
+    );
+    try {
+      await this.db.withTransactionAsync(async () => {
+        for (const a of accounts) {
+          await statement.executeAsync({ $account: a.accountId, $balance: a.balance, $code: a.memberCode });
+        }
+      });
+    } finally {
+      await statement.finalizeAsync();
+    }
+  }
+
   async setMyCustomer(memberCode: string, value: boolean): Promise<void> {
     await this.db.runAsync('UPDATE members SET my_customer = ? WHERE member_code = ?', value ? 1 : 0, memberCode);
   }
@@ -174,8 +205,8 @@ class SqliteOutboxRepo implements OutboxRepo {
     // The primary key on local_txn_id makes a double tap harmless: the second insert is ignored.
     await this.db.runAsync(
       `INSERT OR IGNORE INTO outbox
-       (local_txn_id, member_code, member_name, product_type, amount, reference, collected_at, status, attempts, created_at)
-       VALUES (?, ?, ?, ?, ?, ?, ?, 'PENDING', 0, ?)`,
+       (local_txn_id, member_code, member_name, product_type, amount, reference, collected_at, status, attempts, created_at, account_id)
+       VALUES (?, ?, ?, ?, ?, ?, ?, 'PENDING', 0, ?, ?)`,
       item.localTransactionId,
       item.memberCode,
       item.memberName,
@@ -184,6 +215,7 @@ class SqliteOutboxRepo implements OutboxRepo {
       item.reference,
       item.collectedAt,
       item.createdAt,
+      item.accountId,
     );
   }
 

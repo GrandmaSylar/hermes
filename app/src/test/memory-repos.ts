@@ -1,4 +1,4 @@
-import type { ServerMember } from '@/data/api/contract';
+import type { SavingsAccountInfo, ServerMember } from '@/data/api/contract';
 import type {
   KvRepo,
   MemberRepo,
@@ -23,6 +23,7 @@ class MemoryMembers implements MemberRepo {
       const old = this.rows.get(m.memberCode);
       this.rows.set(m.memberCode, {
         ...m,
+        savingsAccountId: m.savingsAccountId ?? old?.savingsAccountId ?? null,
         myCustomer: old?.myCustomer ?? false,
         collectCount: old?.collectCount ?? 0,
       });
@@ -39,6 +40,15 @@ class MemoryMembers implements MemberRepo {
   }
   async count() {
     return this.rows.size;
+  }
+  async applySavingsAccounts(accounts: SavingsAccountInfo[]) {
+    for (const a of accounts) {
+      const m = this.rows.get(a.memberCode);
+      if (m && (m.savingsAccountId === null || m.savingsAccountId >= a.accountId)) {
+        m.savingsAccountId = a.accountId;
+        m.balances = { ...m.balances, savings: a.balance };
+      }
+    }
   }
   async setMyCustomer(code: string, value: boolean) {
     const m = this.rows.get(code);

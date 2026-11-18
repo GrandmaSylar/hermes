@@ -13,6 +13,10 @@ export interface SyncReport {
   /** Registrations delivered to the office (new or already received). */
   registrationsSent: number;
   registrationsRejected: number;
+  /** Savings accounts refreshed from the core system. */
+  accountsPulled: number;
+  /** The core system answered with an error the user cannot fix by retrying immediately. */
+  serverError: string | null;
   /** The server could not be reached; items were left waiting. */
   offline: boolean;
   /** The session is no longer valid; the user must sign in again. */
@@ -32,6 +36,9 @@ export interface SyncDeps {
 const DAY_MS = 24 * 60 * 60 * 1000;
 const KV_CURSOR = 'members.cursor';
 const KV_PULLED_AT = 'members.pulledAt';
+/** The core system's member list has no savings accounts, so they are pulled in a second stage. */
+const KV_STAGE = 'pull.stage';
+const KV_ACCOUNTS_CURSOR = 'accounts.cursor';
 
 let running: Promise<SyncReport> | null = null;
 
@@ -59,6 +66,7 @@ function toPushItem(item: OutboxItem): PushItem {
     amount: item.amount,
     reference: item.reference,
     collectedAt: item.collectedAt,
+    accountId: item.accountId,
   };
 }
 
@@ -72,6 +80,8 @@ async function run(deps: SyncDeps): Promise<SyncReport> {
     pulledMembers: 0,
     registrationsSent: 0,
     registrationsRejected: 0,
+    accountsPulled: 0,
+    serverError: null,
     offline: false,
     authError: false,
   };
@@ -82,7 +92,8 @@ async function run(deps: SyncDeps): Promise<SyncReport> {
     await repos.outbox.recoverInterrupted();
     await repos.registrations.recoverInterrupted();
 
-    await pushRegistrations(deps, report, batchSize);
+    // Only send registrations if the core system can receive them. Until then they wait safely on the phone.
+    if (api.capabilities.registration) await pushRegistrations(deps, report, batchSize);
 
     for (;;) {
       const batch = await repos.outbox.due(batchSize);
@@ -133,6 +144,7 @@ async function run(deps: SyncDeps): Promise<SyncReport> {
   } catch (error) {
     if (error instanceof ApiError && error.kind === 'NETWORK') report.offline = true;
     else if (error instanceof ApiError && error.kind === 'AUTH') report.authError = true;
+    else if (error instanceof ApiError) report.serverError = error.message;
     else throw error;
   }
   return report;
@@ -206,18 +218,36 @@ async function pullMembersIfStale(deps: SyncDeps, report: SyncReport): Promise<v
   const maxAge = deps.memberMaxAgeMs ?? DAY_MS;
 
   const pulledAt = await repos.kv.get(KV_PULLED_AT);
+  let stage = (await repos.kv.get(KV_STAGE)) || 'members';
   let cursor = (await repos.kv.get(KV_CURSOR)) || null;
   const fresh = pulledAt !== null && now.getTime() - new Date(pulledAt).getTime() < maxAge;
-  if (fresh && cursor === null) return;
+  if (fresh && stage === 'members' && cursor === null) return;
 
-  for (;;) {
-    const page = await api.pullMembers(session, cursor);
-    await repos.members.upsertMany(page.items);
-    report.pulledMembers += page.items.length;
-    cursor = page.nextCursor;
-    // Remember progress so an interrupted pull resumes instead of restarting.
-    await repos.kv.set(KV_CURSOR, cursor ?? '');
-    if (cursor === null) break;
+  // Stage 1: members. Progress is remembered so an interrupted pull resumes instead of restarting.
+  if (stage === 'members') {
+    for (;;) {
+      const page = await api.pullMembers(session, cursor);
+      await repos.members.upsertMany(page.items);
+      report.pulledMembers += page.items.length;
+      cursor = page.nextCursor;
+      await repos.kv.set(KV_CURSOR, cursor ?? '');
+      if (cursor === null) break;
+    }
+    stage = 'accounts';
+    await repos.kv.set(KV_STAGE, stage);
+    await repos.kv.set(KV_ACCOUNTS_CURSOR, '');
   }
+
+  // Stage 2: each member's savings account id and balance.
+  let accountsCursor = (await repos.kv.get(KV_ACCOUNTS_CURSOR)) || null;
+  for (;;) {
+    const page = await api.pullSavingsAccounts(session, accountsCursor);
+    await repos.members.applySavingsAccounts(page.items);
+    report.accountsPulled += page.items.length;
+    accountsCursor = page.nextCursor;
+    await repos.kv.set(KV_ACCOUNTS_CURSOR, accountsCursor ?? '');
+    if (accountsCursor === null) break;
+  }
+  await repos.kv.set(KV_STAGE, 'members');
   await repos.kv.set(KV_PULLED_AT, now.toISOString());
 }

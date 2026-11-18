@@ -12,6 +12,7 @@ const member = (status: Member['status'] = 'ACTIVE'): Member => ({
   branchCode: '001',
   balances: { savings: '10.00', shares: '0.00', loan: '0.00' },
   asOf: '2026-11-14T00:00:00.000Z',
+  savingsAccountId: 500001,
   myCustomer: false,
   collectCount: 0,
 });
@@ -43,6 +44,14 @@ describe('validateCapture', () => {
     expect(check('100', { count: 1, amountMinor: 90001n })).toMatch(/exceed your limit/);
     expect(check('100.01', { count: 1, amountMinor: 90000n })).toMatch(/exceed your limit/);
   });
+  test('a savings deposit needs the savings account id from the core system', () => {
+    const noAccount = { ...member(), savingsAccountId: null };
+    expect(check('10', none, noAccount)).toMatch(/no savings account/);
+    // Other products do not use it.
+    expect(
+      validateCapture({ member: noAccount, productType: 'SHARE_CONTRIBUTION', amount: '10' }, none, limits),
+    ).toBeNull();
+  });
   test('refuses inactive and pending members', () => {
     expect(check('10', none, member('INACTIVE'))).toMatch(/not active/);
     expect(check('10', none, member('PENDING_APPROVAL'))).toMatch(/not active/);
@@ -63,6 +72,7 @@ describe('computeDayMetrics', () => {
     lastError: null,
     serverId: null,
     createdAt: '2026-11-14T08:00:00.000Z',
+    accountId: 500001,
   });
 
   test('credits are everything received, debits are rejected items, net is the difference', () => {

@@ -8,6 +8,7 @@ App for field officers (mobilizers) of the QSS core banking system, for Android 
 |---|---|
 | `docs/QSS_Mobile_Banker_Requirements.md` | The requirements specification (master, v1.1) |
 | `docs/core-api-dev-brief.md` | What the core banking team must provide in `cua-core-api` |
+| `docs/core-integration.md` | How the app uses the existing core API today, what is switched off, and what to confirm |
 | `docs/cableee.md` | Earlier draft of the spec (superseded by the master above) |
 | `app/` | The React Native (Expo SDK 58, TypeScript) app |
 | `git-rules (1).md` | Git rules for this project |
@@ -27,7 +28,8 @@ This project does not modify or push to `cua-core-api`. The app talks to the cor
 - Cash collection capture (savings deposit, share contribution, loan repayment) saved to an on-device outbox, then synced automatically with idempotent delivery.
 - Field member registration: name, gender, date of birth (18+), mobile number, ID type and number, address. Saved to the same on-device outbox and synced idempotently as a draft for office approval. The member has no member number and cannot transact until approved. The mock refuses a duplicate ID number. ID photo and signature capture are not built yet.
 - Sync screen, "my customers" and frequent members, and provisional daily credits, debits and net cash.
-- All server calls go through `src/data/api/contract.ts`. Today it is implemented by an in-app mock (`src/data/api/mock.ts`) that behaves like the `/v1/field` API specified in `docs/core-api-dev-brief.md`. A real HTTP client replaces it once the core team publishes the OpenAPI spec.
+- All server calls go through `src/data/api/contract.ts`. There are two implementations: `http.ts`, a real client for the core API as it exists today (see `docs/core-integration.md`), and `mock.ts`, demo data that behaves like the fuller API in `docs/core-api-dev-brief.md`. Set `EXPO_PUBLIC_API_URL` to use the real one; without it the app shows a "Demo mode" banner.
+- Features the core cannot do yet (share contributions, loan repayments, member registration, SMS code) are switched off by `capabilities` and hidden in the app until the core supports them.
 
 Not built yet: ID photo and signature capture for registration, passkeys, device enrolment and remote kill, the real API client, receipts printing, reconciliation views.
 

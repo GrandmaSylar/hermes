@@ -1,8 +1,9 @@
 import { ApiError } from '@/data/api/contract';
-import { MOCK_OTP, MOCK_PASSWORD, MOCK_STAFF_ID, MockApi } from '@/data/api/mock';
+import { MockApi } from '@/data/api/mock';
 import type { RegistrationDraft } from '@/domain/registration';
 import type { Session } from '@/domain/types';
 import { createMemoryRepos } from '@/test/memory-repos';
+import { signInToMock } from '@/test/sign-in';
 import { syncOnce } from './engine';
 import { registerMember } from './register';
 
@@ -23,8 +24,7 @@ const draft = (overrides: Partial<RegistrationDraft> = {}): RegistrationDraft =>
 
 async function setup(offline = { value: false }) {
   const api = new MockApi({ memberCount: 20, failNetwork: () => offline.value });
-  const { challengeId } = await api.login(MOCK_STAFF_ID, MOCK_PASSWORD);
-  const session: Session = await api.verifyOtp(challengeId, MOCK_OTP, 'device-1');
+  const session: Session = await signInToMock(api);
   return { api, session, repos: createMemoryRepos(), offline };
 }
 

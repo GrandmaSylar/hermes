@@ -5,11 +5,10 @@ import { formatAmount } from '@/domain/money';
 import { PRODUCT_LABELS, type Member, type OutboxItem, type ProductType } from '@/domain/types';
 import { useApp } from '@/state/AppProvider';
 import { captureCollection } from '@/sync/capture';
-import { Button, Card, Field, colors } from '@/ui/theme';
+import { Button, Card, Field, balanceText, colors } from '@/ui/theme';
 
-const PRODUCTS: ProductType[] = ['SAVINGS_DEPOSIT', 'SHARE_CONTRIBUTION', 'LOAN_REPAYMENT'];
 
-function balanceFor(member: Member, product: ProductType): { label: string; value: string } {
+function balanceFor(member: Member, product: ProductType): { label: string; value: string | null } {
   switch (product) {
     case 'SAVINGS_DEPOSIT':
       return { label: 'Current savings balance', value: member.balances.savings };
@@ -22,7 +21,7 @@ function balanceFor(member: Member, product: ProductType): { label: string; valu
 
 export default function CollectScreen() {
   const { code } = useLocalSearchParams<{ code: string }>();
-  const { repos, session, newId, touch, syncNow } = useApp();
+  const { repos, session, newId, touch, syncNow, capabilities } = useApp();
   const [member, setMember] = useState<Member | null>(null);
   const [product, setProduct] = useState<ProductType>('SAVINGS_DEPOSIT');
   const [amount, setAmount] = useState('');
@@ -37,6 +36,13 @@ export default function CollectScreen() {
   }, [repos, code]);
 
   if (!member || !repos || !session) return null;
+
+  // Only offer what the core system can accept today.
+  const PRODUCTS: ProductType[] = [
+    'SAVINGS_DEPOSIT',
+    ...(capabilities.shareContribution ? (['SHARE_CONTRIBUTION'] as const) : []),
+    ...(capabilities.loanRepayment ? (['LOAN_REPAYMENT'] as const) : []),
+  ];
 
   const save = async () => {
     // Guards a double tap: the button is disabled while saving, and the entry's
@@ -119,7 +125,7 @@ export default function CollectScreen() {
 
         <Card>
           <Text style={{ color: colors.muted, fontSize: 12 }}>{bal.label.toUpperCase()}</Text>
-          <Text style={{ color: colors.text, fontSize: 20, fontWeight: '700', marginTop: 2 }}>GHS {formatAmount(bal.value)}</Text>
+          <Text style={{ color: colors.text, fontSize: 20, fontWeight: '700', marginTop: 2 }}>{balanceText(bal.value, formatAmount)}</Text>
           <Text style={{ color: colors.muted, fontSize: 12, marginTop: 4 }}>As of last sync</Text>
         </Card>
 

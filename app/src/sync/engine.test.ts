@@ -1,7 +1,8 @@
 import { ApiError } from '@/data/api/contract';
-import { MOCK_OTP, MOCK_PASSWORD, MOCK_STAFF_ID, MockApi } from '@/data/api/mock';
+import { MockApi } from '@/data/api/mock';
 import type { Session } from '@/domain/types';
 import { createMemoryRepos } from '@/test/memory-repos';
+import { signInToMock } from '@/test/sign-in';
 import { captureCollection } from './capture';
 import { syncOnce } from './engine';
 
@@ -11,8 +12,7 @@ const newId = () => `local-${++ids}`;
 async function setup(options: { memberCount?: number; offline?: { value: boolean } } = {}) {
   const offline = options.offline ?? { value: false };
   const api = new MockApi({ memberCount: options.memberCount ?? 300, failNetwork: () => offline.value });
-  const { challengeId } = await api.login(MOCK_STAFF_ID, MOCK_PASSWORD);
-  const session: Session = await api.verifyOtp(challengeId, MOCK_OTP, 'device-1');
+  const session: Session = await signInToMock(api);
   const repos = createMemoryRepos();
   // Pull members first, as the app does on its first sync.
   await syncOnce({ repos, api, session });
@@ -79,6 +79,7 @@ describe('sync engine', () => {
         amount: saved.item.amount,
         reference: saved.item.reference,
         collectedAt: saved.item.collectedAt,
+        accountId: saved.item.accountId,
       },
     ]);
     expect(first.status).toBe('ACCEPTED');
@@ -109,6 +110,7 @@ describe('sync engine', () => {
       reference: null,
       collectedAt: new Date().toISOString(),
       createdAt: new Date().toISOString(),
+      accountId: member.savingsAccountId,
     });
     const report = await syncOnce({ repos, api, session });
     expect(report.conflicts).toBe(1);
@@ -178,5 +180,61 @@ describe('sync engine', () => {
     const report = await syncOnce({ repos, api: expired, session });
     expect(report.authError).toBe(true);
     expect((await repos.outbox.due(10)).length).toBe(1);
+  });
+});
+
+describe('core system limits', () => {
+  test('members get their savings account id from the second stage of the pull', async () => {
+    const { repos } = await setup({ memberCount: 30 });
+    const member = await activeMember(repos);
+    expect(member.savingsAccountId).not.toBeNull();
+  });
+
+  test('an interrupted account pull resumes without re-downloading members', async () => {
+    const { api, session, repos } = await setup({ memberCount: 2500 });
+    // Pretend the app died after the members were saved but before the accounts finished.
+    await repos.kv.set('pull.stage', 'accounts');
+    await repos.kv.set('accounts.cursor', '1000');
+    await repos.kv.rows.delete('members.pulledAt');
+    const report = await syncOnce({ repos, api, session });
+    expect(report.pulledMembers).toBe(0);
+    expect(report.accountsPulled).toBe(1500);
+    expect(await repos.kv.get('pull.stage')).toBe('members');
+  });
+
+  test('registrations wait on the phone while the core cannot receive them', async () => {
+    const { api, session, repos } = await setup();
+    await repos.registrations.enqueue({
+      localRegistrationId: 'r1',
+      firstName: 'Ama',
+      lastName: 'Mensah',
+      gender: 'F',
+      dateOfBirth: '1990-04-23',
+      phone: '0241234567',
+      idType: 'GHANA_CARD',
+      idNumber: 'GHA-123456789-0',
+      address: 'Kasoa',
+      capturedAt: new Date().toISOString(),
+      createdAt: new Date().toISOString(),
+    });
+    const limited = Object.create(api) as typeof api;
+    Object.defineProperty(limited, 'capabilities', { value: { ...api.capabilities, registration: false } });
+    const report = await syncOnce({ repos, api: limited, session });
+    expect(report.registrationsSent).toBe(0);
+    expect((await repos.registrations.list(10))[0].status).toBe('PENDING');
+  });
+
+  test('a server error is reported and items stay waiting, instead of crashing the sync', async () => {
+    const { api, session, repos } = await setup();
+    const member = await activeMember(repos);
+    await captureCollection(repos, session, { member, productType: 'SAVINGS_DEPOSIT', amount: '5' }, newId);
+    const broken = new MockApi({ memberCount: 10 });
+    broken.pushTransactions = async () => {
+      throw new ApiError('SERVER', 'The server had a problem. Try again shortly.');
+    };
+    const report = await syncOnce({ repos, api: broken, session });
+    expect(report.serverError).toMatch(/server had a problem/);
+    expect((await repos.outbox.due(10)).length).toBe(1);
+    expect(api).toBeDefined();
   });
 });

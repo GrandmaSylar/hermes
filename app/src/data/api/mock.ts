@@ -3,7 +3,10 @@ import type { MobilizerLimits, Session } from '@/domain/types';
 import {
   ApiError,
   type ApiClient,
+  type ApiCapabilities,
   type MemberPage,
+  type SavingsAccountPage,
+  type SignInResult,
   type PushItem,
   type PushRegistration,
   type PushResult,
@@ -55,6 +58,7 @@ export function buildMockMembers(count: number, asOf: string): ServerMember[] {
         loan: i % 3 === 0 ? money((seed >> 5) % 800000) : '0.00',
       },
       asOf,
+      savingsAccountId: 500000 + i,
     });
   }
   return members;
@@ -68,6 +72,9 @@ export interface MockApiOptions {
 }
 
 export class MockApi implements ApiClient {
+  /** The mock behaves like the full target API, so every feature can be developed and tested. */
+  readonly capabilities: ApiCapabilities = { otp: true, registration: true, shareContribution: true, loanRepayment: true };
+
   private readonly members: ServerMember[];
   private readonly seen = new Map<string, { fingerprint: string; serverId: string }>();
   private nextServerId = 1;
@@ -84,14 +91,14 @@ export class MockApi implements ApiClient {
     if (this.failNetwork()) throw new ApiError('NETWORK', 'No connection to the server.');
   }
 
-  async login(staffId: string, password: string): Promise<{ challengeId: string }> {
+  async login(staffId: string, password: string, _deviceId: string): Promise<SignInResult> {
     this.guard();
     if (staffId.trim().toUpperCase() !== MOCK_STAFF_ID || password !== MOCK_PASSWORD) {
       throw new ApiError('AUTH', 'Staff ID or password is incorrect.');
     }
     const challengeId = `challenge-${this.challenges.size + 1}`;
     this.challenges.add(challengeId);
-    return { challengeId };
+    return { kind: 'OTP_REQUIRED', challengeId };
   }
 
   async verifyOtp(challengeId: string, otp: string, deviceId: string): Promise<Session> {
@@ -121,6 +128,19 @@ export class MockApi implements ApiClient {
     const pageSize = 1000;
     const start = cursor ? Number(cursor) : 0;
     const items = this.members.slice(start, start + pageSize);
+    const next = start + pageSize;
+    return { items, nextCursor: next < this.members.length ? String(next) : null };
+  }
+
+  async pullSavingsAccounts(_session: Session, cursor: string | null): Promise<SavingsAccountPage> {
+    this.guard();
+    const pageSize = 1000;
+    const start = cursor ? Number(cursor) : 0;
+    const items = this.members.slice(start, start + pageSize).map((m) => ({
+      memberCode: m.memberCode,
+      accountId: m.savingsAccountId ?? 0,
+      balance: m.balances.savings,
+    }));
     const next = start + pageSize;
     return { items, nextCursor: next < this.members.length ? String(next) : null };
   }
@@ -188,7 +208,7 @@ export class MockApi implements ApiClient {
     if (toMinor(item.amount) > toMinor(LIMITS.maxSingleAmount)) {
       return { localTransactionId: item.localTransactionId, status: 'REJECTED', reason: 'Amount exceeds the single-collection limit.' };
     }
-    if (item.productType === 'LOAN_REPAYMENT' && toMinor(member.balances.loan) === 0n) {
+    if (item.productType === 'LOAN_REPAYMENT' && toMinor(member.balances.loan ?? '0') === 0n) {
       return { localTransactionId: item.localTransactionId, status: 'REJECTED', reason: 'Member has no outstanding loan.' };
     }
 
