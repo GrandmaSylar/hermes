@@ -1,0 +1,152 @@
+import { ApiError, type ApiClient, type PushItem } from '@/data/api/contract';
+import type { Repos } from '@/data/repositories';
+import type { OutboxItem, Session } from '@/domain/types';
+
+export interface SyncReport {
+  pushed: number;
+  accepted: number;
+  duplicates: number;
+  rejected: number;
+  conflicts: number;
+  pulledMembers: number;
+  /** The server could not be reached; items were left waiting. */
+  offline: boolean;
+  /** The session is no longer valid; the user must sign in again. */
+  authError: boolean;
+}
+
+export interface SyncDeps {
+  repos: Repos;
+  api: ApiClient;
+  session: Session;
+  now?: () => Date;
+  /** How long cached member data is trusted before a refresh. */
+  memberMaxAgeMs?: number;
+  batchSize?: number;
+}
+
+const DAY_MS = 24 * 60 * 60 * 1000;
+const KV_CURSOR = 'members.cursor';
+const KV_PULLED_AT = 'members.pulledAt';
+
+let running: Promise<SyncReport> | null = null;
+
+/**
+ * Pushes waiting items, then refreshes member data. Only one sync runs at a
+ * time; a second call while one is running shares its result.
+ *
+ * Pushing is idempotent end to end: every item carries its own
+ * localTransactionId, so re-sending after a dropped response can only ever
+ * produce a DUPLICATE answer, never a second entry.
+ */
+export function syncOnce(deps: SyncDeps): Promise<SyncReport> {
+  if (running) return running;
+  running = run(deps).finally(() => {
+    running = null;
+  });
+  return running;
+}
+
+function toPushItem(item: OutboxItem): PushItem {
+  return {
+    localTransactionId: item.localTransactionId,
+    memberCode: item.memberCode,
+    productType: item.productType,
+    amount: item.amount,
+    reference: item.reference,
+    collectedAt: item.collectedAt,
+  };
+}
+
+async function run(deps: SyncDeps): Promise<SyncReport> {
+  const report: SyncReport = {
+    pushed: 0,
+    accepted: 0,
+    duplicates: 0,
+    rejected: 0,
+    conflicts: 0,
+    pulledMembers: 0,
+    offline: false,
+    authError: false,
+  };
+  const { repos, api, session } = deps;
+  const batchSize = deps.batchSize ?? 50;
+
+  try {
+    await repos.outbox.recoverInterrupted();
+
+    for (;;) {
+      const batch = await repos.outbox.due(batchSize);
+      if (batch.length === 0) break;
+      const ids = batch.map((item) => item.localTransactionId);
+      await repos.outbox.markSending(ids);
+
+      let results;
+      try {
+        results = await api.pushTransactions(session, batch.map(toPushItem));
+      } catch (error) {
+        await repos.outbox.release(ids);
+        throw error;
+      }
+
+      const answered = new Set<string>();
+      for (const result of results) {
+        answered.add(result.localTransactionId);
+        report.pushed += 1;
+        switch (result.status) {
+          case 'ACCEPTED':
+            report.accepted += 1;
+            await repos.outbox.applyResult(result.localTransactionId, 'SYNCED', { serverId: result.serverId ?? null, lastError: null });
+            break;
+          case 'DUPLICATE':
+            report.duplicates += 1;
+            await repos.outbox.applyResult(result.localTransactionId, 'SYNCED', { serverId: result.serverId ?? null, lastError: null });
+            break;
+          case 'REJECTED':
+            report.rejected += 1;
+            await repos.outbox.applyResult(result.localTransactionId, 'REJECTED', { lastError: result.reason ?? 'Rejected.' });
+            break;
+          case 'CONFLICT':
+            report.conflicts += 1;
+            await repos.outbox.applyResult(result.localTransactionId, 'CONFLICT', { lastError: result.reason ?? 'Conflict.' });
+            break;
+        }
+      }
+      // Anything the server did not answer for goes back to waiting.
+      const unanswered = ids.filter((id) => !answered.has(id));
+      if (unanswered.length > 0) {
+        await repos.outbox.release(unanswered);
+        break;
+      }
+    }
+
+    await pullMembersIfStale(deps, report);
+  } catch (error) {
+    if (error instanceof ApiError && error.kind === 'NETWORK') report.offline = true;
+    else if (error instanceof ApiError && error.kind === 'AUTH') report.authError = true;
+    else throw error;
+  }
+  return report;
+}
+
+async function pullMembersIfStale(deps: SyncDeps, report: SyncReport): Promise<void> {
+  const { repos, api, session } = deps;
+  const now = (deps.now ?? (() => new Date()))();
+  const maxAge = deps.memberMaxAgeMs ?? DAY_MS;
+
+  const pulledAt = await repos.kv.get(KV_PULLED_AT);
+  let cursor = (await repos.kv.get(KV_CURSOR)) || null;
+  const fresh = pulledAt !== null && now.getTime() - new Date(pulledAt).getTime() < maxAge;
+  if (fresh && cursor === null) return;
+
+  for (;;) {
+    const page = await api.pullMembers(session, cursor);
+    await repos.members.upsertMany(page.items);
+    report.pulledMembers += page.items.length;
+    cursor = page.nextCursor;
+    // Remember progress so an interrupted pull resumes instead of restarting.
+    await repos.kv.set(KV_CURSOR, cursor ?? '');
+    if (cursor === null) break;
+  }
+  await repos.kv.set(KV_PULLED_AT, now.toISOString());
+}
