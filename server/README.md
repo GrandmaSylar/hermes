@@ -39,9 +39,15 @@ npm run dev
 
 ## Deploy (same VPS as the database)
 
-1. Create the limited login: `deploy/create-db-login.sql`. Test it on a copy of the database first; it has not yet been run against a real server.
+1. Create the limited login: `deploy/create-db-login.sql` (replace the password and the database name). Run it with `sqlcmd -I`; the core tables have filtered indexes, which need quoted identifiers on. Tested on a copy of a real core database: the login can read members, accounts and bankers and add pending deposits (the branch trigger fires normally), and is refused on updates, deletes, balances, the chart of accounts and the user table.
 2. Copy `.env.example` to `.env` and fill it in. `DB_SERVER` is the SQL Server container's name on the shared Docker network, with the in-network port (1433), not the published one.
 3. In `deploy/`, set `DOMAIN` (a name pointing at the VPS) and `DB_NETWORK`, then `docker compose up -d --build`. Caddy gets and renews the HTTPS certificate on its own.
 4. Close the database port to the internet in the VPS firewall. Only ports 80 and 443 need to be open.
+
+### If the VPS already runs Nginx
+
+Port 80 and 443 are then taken, so skip Caddy. Use `deploy/docker-compose.behind-nginx.yml`, which publishes the server on `127.0.0.1:3000` only, and `deploy/nginx-field.conf` as a new server block for your name. Then `certbot --nginx -d <your name>` adds the certificate to that block. Leave existing sites alone. If the database container is on Docker's default bridge, create a network, attach the container to it (`docker network connect`, no restart needed) and set `DB_NETWORK` to that network; the server then reaches it by container name.
+
+Check after deploying: `GET /health` returns `{"status":"ok"}` and a sign-in works.
 
 Point the app at `https://<domain>` with `EXPO_PUBLIC_API_URL`.
