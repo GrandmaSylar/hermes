@@ -14,17 +14,18 @@ import {
 } from './contract';
 
 /**
- * HTTP client for the core banking system, written against the API as it
- * exists today (cua-core-api: /auth, /customers, /savings, /mobile-banking).
+ * HTTP client for the QSS field server (see /server). The server sits in front
+ * of the core banking database: it signs bankers in with their PIN, lists their
+ * branch's members with savings account ids, and stores each deposit as a
+ * pending request that the office approves in the Approval Center.
  *
  * What the core cannot do yet is switched off in `capabilities`, so the app
- * never offers it. Each gap is listed in docs/core-api-dev-brief.md and turns
- * on here when the core ships it. Nothing in this file posts to a ledger: a
- * field deposit is only ever sent as a request for the office to approve.
+ * never offers it. Nothing in this file posts to a ledger: a field deposit is
+ * only ever sent as a request for the office to approve.
  */
 
 export interface HttpApiOptions {
-  /** For example https://staging.example.com. No trailing path. */
+  /** For example https://field.example.com. No trailing path. */
   baseUrl: string;
   fetchImpl?: typeof fetch;
   timeoutMs?: number;
@@ -38,7 +39,8 @@ export const DEFAULT_LIMITS: MobilizerLimits = {
   maxSingleAmount: '5000.00',
 };
 
-const PAGE_SIZE = 100;
+const PAGE_SIZE = 200;
+const V1 = '/v1';
 
 /** A 4xx answer about one request (not the session): bad input, not found, conflict. */
 export class HttpStatusError extends Error {
@@ -71,33 +73,37 @@ export function twoDecimals(value: unknown): string | null {
   return `${m[1]}${m[2]}.${(m[3] ?? '').padEnd(2, '0').slice(0, 2)}`;
 }
 
-/** Nest sends `message` as text or as a list of validation problems. */
+/** The server answers with `message` (an error) or `reason` (why a deposit was refused). */
 export function messageFrom(body: unknown, fallback: string): string {
-  const message = asRecord(body).message;
+  const record = asRecord(body);
+  const message = record.message;
   if (Array.isArray(message)) return message.map(asText).join(' ');
-  return typeof message === 'string' && message.trim() ? message : fallback;
+  if (typeof message === 'string' && message.trim()) return message;
+  const reason = record.reason;
+  return typeof reason === 'string' && reason.trim() ? reason : fallback;
 }
 
-/** The core's member status codes: PND, ACT, INA, DOR, SUS, CLO (or the long names). */
-export function mapMemberStatus(code: string): ServerMember['status'] {
-  const c = code.trim().toUpperCase();
-  if (c.startsWith('ACT')) return 'ACTIVE';
-  if (c.startsWith('PEN') || c === 'PND') return 'PENDING_APPROVAL';
+/** The server already reduces the core's status codes to ACTIVE, PENDING or INACTIVE. */
+export function mapMemberStatus(status: string): ServerMember['status'] {
+  const s = status.trim().toUpperCase();
+  if (s === 'ACTIVE') return 'ACTIVE';
+  if (s === 'PENDING') return 'PENDING_APPROVAL';
   return 'INACTIVE';
 }
 
-export function mapMember(row: unknown, asOf: string): ServerMember {
+export function mapMember(row: unknown, asOf: string, branchCode: string): ServerMember {
   const r = asRecord(row);
+  const accountId = Number(r.savingsAccountId);
   return {
     memberCode: asText(r.code),
-    name: asText(r.fullName).trim() || `${asText(r.firstName)} ${asText(r.lastName)}`.trim(),
+    name: asText(r.fullName).trim(),
     phone: asText(r.phone),
     status: mapMemberStatus(asText(r.status)),
-    branchCode: asText(r.branchCode),
-    // The member list carries no balances. Savings come from the savings accounts pull;
-    // shares and loan are not available to the field channel yet.
-    balances: { savings: '0.00', shares: null, loan: null },
+    branchCode,
+    // Savings come with the member. Shares and loan are not available to the field channel.
+    balances: { savings: twoDecimals(r.savingsBalance) ?? '0.00', shares: null, loan: null },
     asOf,
+    savingsAccountId: r.savingsAccountId != null && Number.isInteger(accountId) && accountId > 0 ? accountId : null,
   };
 }
 
@@ -131,82 +137,48 @@ export class HttpApi implements ApiClient {
 
   // ---- sign-in --------------------------------------------------------
 
-  async login(staffId: string, password: string, deviceId: string): Promise<SignInResult> {
-    let tokens: Tokens;
+  /**
+   * Staff ID and PIN. The server checks the PIN against the core system and
+   * answers with the banker's details and limits, so there is no second step.
+   */
+  async login(staffId: string, pin: string, deviceId: string): Promise<SignInResult> {
+    let body: Json;
     try {
-      const body = asRecord(await this.send(null, 'POST', '/auth/login', { username: staffId.trim(), password }));
-      tokens = { accessToken: asText(body.accessToken), refreshToken: asText(body.refreshToken) };
+      body = asRecord(await this.send(null, 'POST', `${V1}/auth/login`, { username: staffId.trim(), pin, deviceId }));
     } catch (error) {
+      if (error instanceof HttpStatusError && (error.status === 400 || error.status === 401 || error.status === 403)) {
+        throw new ApiError('AUTH', error.status === 400 ? 'Enter your staff ID and PIN.' : error.message);
+      }
       if (error instanceof ApiError && error.kind === 'AUTH') {
-        throw new ApiError('AUTH', 'Staff ID or password is incorrect.');
+        throw new ApiError('AUTH', 'Staff ID or PIN is incorrect.');
       }
       throw error;
     }
-    if (!tokens.accessToken) throw new ApiError('SERVER', 'The server did not return a session.');
-    this.tokens = tokens;
+    const accessToken = asText(body.accessToken);
+    const officer = asRecord(body.officer);
+    if (!accessToken || !asText(officer.id)) throw new ApiError('SERVER', 'The server did not return a session.');
+    const refreshToken = asText(body.refreshToken);
+    this.tokens = { accessToken, refreshToken };
 
-    try {
-      return { kind: 'SIGNED_IN', session: await this.openSession(staffId, deviceId, tokens) };
-    } catch (error) {
-      this.reset();
-      throw error;
-    }
+    const limits = asRecord(body.limits);
+    const session: Session = {
+      officerId: asText(officer.id),
+      officerName: asText(officer.fullName) || staffId.trim(),
+      branchCode: asText(officer.branchCode),
+      deviceId,
+      accessToken,
+      refreshToken,
+      limits: {
+        maxUnsyncedItems: Number.isInteger(Number(limits.maxUnsyncedItems)) && Number(limits.maxUnsyncedItems) > 0 ? Number(limits.maxUnsyncedItems) : DEFAULT_LIMITS.maxUnsyncedItems,
+        maxUnsyncedAmount: twoDecimals(limits.maxUnsyncedAmount) ?? DEFAULT_LIMITS.maxUnsyncedAmount,
+        maxSingleAmount: twoDecimals(limits.maxSingleAmount) ?? DEFAULT_LIMITS.maxSingleAmount,
+      },
+    };
+    return { kind: 'SIGNED_IN', session };
   }
 
   async verifyOtp(): Promise<Session> {
     throw new ApiError('SERVER', 'This server does not use SMS codes.');
-  }
-
-  /**
-   * Finds the signed-in person's mobile banker record and checks this phone is
-   * registered to them. The core registers phones, not the phone itself, so an
-   * unregistered phone is told its id to give to a supervisor.
-   */
-  private async openSession(staffId: string, deviceId: string, tokens: Tokens): Promise<Session> {
-    const provisional = { accessToken: tokens.accessToken, refreshToken: tokens.refreshToken } as Session;
-
-    const found = asRecord(
-      await this.send(provisional, 'GET', `/mobile-banking/bankers?search=${encodeURIComponent(staffId.trim())}&limit=100`),
-    );
-    const officers = Array.isArray(found.items) ? found.items.map(asRecord) : [];
-    const officer = officers.find((o) => asText(o.staffId).toLowerCase() === staffId.trim().toLowerCase());
-    if (!officer) {
-      throw new ApiError('AUTH', 'Your account is not set up as a mobile banker. Ask your supervisor.');
-    }
-    if (asText(officer.status).toUpperCase() !== 'ACTIVE') {
-      throw new ApiError('AUTH', 'Your mobile banker profile is not active. Ask your supervisor.');
-    }
-    const officerId = asText(officer.officerId);
-
-    const devices = asRecord(
-      await this.send(provisional, 'GET', `/mobile-banking/devices?officerId=${encodeURIComponent(officerId)}&limit=100`),
-    );
-    const device = (Array.isArray(devices.items) ? devices.items.map(asRecord) : []).find(
-      (d) => asText(d.deviceId) === deviceId,
-    );
-    if (!device) {
-      throw new ApiError('AUTH', `This phone is not registered for field work. Give this phone ID to your supervisor: ${deviceId}`);
-    }
-    if (asText(device.status).toUpperCase() !== 'ACTIVE' || device.trusted !== true) {
-      throw new ApiError('AUTH', 'This phone is registered but not yet approved as trusted. Ask your supervisor.');
-    }
-
-    // The officer's cash limit bounds the cash held before it reaches the office.
-    const cashLimit = twoDecimals(officer.cashLimit);
-    const limits: MobilizerLimits = {
-      ...DEFAULT_LIMITS,
-      maxUnsyncedAmount: cashLimit !== null && /[1-9]/.test(cashLimit) && !cashLimit.startsWith('-') ? cashLimit : DEFAULT_LIMITS.maxUnsyncedAmount,
-    };
-
-    return {
-      officerId,
-      officerName: asText(officer.displayName) || staffId.trim(),
-      branchCode: asText(officer.branchCode),
-      deviceId,
-      accessToken: tokens.accessToken,
-      refreshToken: tokens.refreshToken,
-      limits,
-    };
   }
 
   async limits(session: Session): Promise<MobilizerLimits> {
@@ -217,31 +189,20 @@ export class HttpApi implements ApiClient {
 
   async pullMembers(session: Session, cursor: string | null): Promise<MemberPage> {
     const query = `limit=${PAGE_SIZE}${cursor ? `&cursor=${encodeURIComponent(cursor)}` : ''}`;
-    const body = asRecord(await this.send(session, 'GET', `/customers?${query}`));
+    const body = asRecord(await this.send(session, 'GET', `${V1}/members?${query}`));
     const asOf = new Date().toISOString();
-    const items = (Array.isArray(body.items) ? body.items : []).map((row) => mapMember(row, asOf));
+    const items = (Array.isArray(body.items) ? body.items : []).map((row) => mapMember(row, asOf, session.branchCode));
     const next = asText(body.nextCursor);
     return { items, nextCursor: next || null };
   }
 
   /**
-   * Each member's savings account id (deposits need it) and balance. Where a
-   * member has several accounts, the repository keeps the lowest id; which
-   * account a field deposit should go to is an open question for the business.
+   * The server sends each member's savings account and balance with the member,
+   * so there is nothing more to fetch. Kept so the sync engine's second stage
+   * ends at once.
    */
-  async pullSavingsAccounts(session: Session, cursor: string | null): Promise<SavingsAccountPage> {
-    const query = `limit=${PAGE_SIZE}&status=ACTIVE${cursor ? `&cursor=${encodeURIComponent(cursor)}` : ''}`;
-    const body = asRecord(await this.send(session, 'GET', `/savings/accounts?${query}`));
-    const items = (Array.isArray(body.items) ? body.items : [])
-      .map(asRecord)
-      .filter((a) => Number.isInteger(Number(a.id)) && asText(a.customerCode) !== '')
-      .map((a) => ({
-        memberCode: asText(a.customerCode),
-        accountId: Number(a.id),
-        balance: twoDecimals(a.currentBalance) ?? '0.00',
-      }));
-    const next = asText(body.nextCursor);
-    return { items, nextCursor: next || null };
+  async pullSavingsAccounts(): Promise<SavingsAccountPage> {
+    return { items: [], nextCursor: null };
   }
 
   // ---- sending data ---------------------------------------------------
@@ -274,27 +235,19 @@ export class HttpApi implements ApiClient {
       return { localTransactionId: id, status: 'REJECTED', reason: 'This member has no savings account on file.' };
     }
     const body = {
-      officerId: session.officerId,
-      deviceId: session.deviceId,
       localTransactionId: id,
       memberCode: item.memberCode,
       accountId: item.accountId,
-      transactionType: 'DEPOSIT',
       amount: item.amount,
-      currency: 'GHS',
-      reference: item.reference ?? undefined,
       collectedAt: item.collectedAt,
     };
     try {
-      const saved = asRecord(
-        await this.send(session, 'POST', '/mobile-banking/transactions', body, {
-          'idempotency-key': `${session.deviceId}:${id}`.slice(0, 255),
-        }),
-      );
-      return { localTransactionId: id, status: 'ACCEPTED', serverId: asText(saved.transactionId) || undefined };
+      const saved = asRecord(await this.send(session, 'POST', `${V1}/deposits`, body));
+      const status = asText(saved.status) === 'DUPLICATE' ? 'DUPLICATE' : 'ACCEPTED';
+      return { localTransactionId: id, status, serverId: asText(saved.serverId) || undefined };
     } catch (error) {
       if (error instanceof HttpStatusError) {
-        // 409: the same id came back with different details, or the same key was reused.
+        // 409: the same id came back with different details. 422: the office rules refused it.
         return { localTransactionId: id, status: error.status === 409 ? 'CONFLICT' : 'REJECTED', reason: error.message };
       }
       throw error;
@@ -356,7 +309,7 @@ export class HttpApi implements ApiClient {
       throw new ApiError('AUTH', session ? 'Your session has ended. Sign in again.' : message);
     }
     if (response.status === 403) throw new ApiError('SERVER', message);
-    if (response.status === 429) throw new ApiError('SERVER', 'Too many requests. Wait a minute and try again.');
+    if (response.status === 429) throw new ApiError('SERVER', messageFrom(parsed, 'Too many requests. Wait a minute and try again.'));
     if (response.status >= 500) throw new ApiError('SERVER', 'The server had a problem. Try again shortly.');
     throw new HttpStatusError(response.status, message);
   }
@@ -368,7 +321,7 @@ export class HttpApi implements ApiClient {
     if (!current) throw new ApiError('AUTH', 'Your session has ended. Sign in again.');
     this.refreshing = (async () => {
       try {
-        const body = asRecord(await this.send(null, 'POST', '/auth/refresh', { refreshToken: current.refreshToken }));
+        const body = asRecord(await this.send(null, 'POST', `${V1}/auth/refresh`, { refreshToken: current.refreshToken }));
         const next = { accessToken: asText(body.accessToken), refreshToken: asText(body.refreshToken) || current.refreshToken };
         if (!next.accessToken) throw new ApiError('AUTH', 'Your session has ended. Sign in again.');
         this.tokens = next;
