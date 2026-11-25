@@ -1,0 +1,18 @@
+# For a VPS that already runs Nginx (or another web server) on ports 80 and 443.
+# The field server listens on 127.0.0.1:3000 only; Nginx adds HTTPS and forwards to it
+# (see deploy/nginx-field.conf). Set DB_NETWORK to the Docker network that carries the
+# SQL Server container (create one and `docker network connect` the container to it
+# if it is on the default bridge). Then: docker compose -f docker-compose.behind-nginx.yml up -d --build
+services:
+  field-server:
+    build: ..
+    env_file: ../.env
+    restart: unless-stopped
+    ports:
+      - "127.0.0.1:3000:3000"
+    networks: [db]
+
+networks:
+  db:
+    external: true
+    name: ${DB_NETWORK:?set DB_NETWORK to the SQL Server container's network}
