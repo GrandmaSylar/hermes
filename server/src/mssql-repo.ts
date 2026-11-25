@@ -18,7 +18,7 @@ import type {
 } from './repo';
 import type { Config } from './config';
 import { smsPhone } from './sms';
-import { buildSchema, describe as describeSchema, has, pick, product, TABLES, type Schema } from './schema';
+import { buildSchema, describe as describeSchema, has, nameExpr, pick, product, TABLES, type Schema } from './schema';
 
 /** The tag the core system filters on; the same value the existing channel writes. */
 const BANKING_TYPE = 'MOBILE-BANKING';
@@ -175,10 +175,10 @@ export class MssqlRepo implements Repo {
         `DECLARE @page TABLE (Code numeric(10,0) PRIMARY KEY);
          INSERT @page (Code)
            SELECT TOP (@limit) c.Code FROM dbo.Customer c
-           WHERE LTRIM(RTRIM(c.BranchCode)) = @branch AND c.Code > @after
+           WHERE LTRIM(RTRIM(ISNULL(c.BranchCode, ''))) IN (@branch, '') AND c.Code > @after
            ORDER BY c.Code;
 
-         SELECT c.Code, c.FullName, ${pick(s, 'Customer', 'c', 'PhoneNo', 'CAST(NULL AS varchar(50))')} AS PhoneNo,
+         SELECT c.Code, ${nameExpr(s)} AS FullName, ${pick(s, 'Customer', 'c', 'PhoneNo', 'CAST(NULL AS varchar(50))')} AS PhoneNo,
                 ${pick(s, 'Customer', 'c', 'StatusCode', "'ACT'")} AS StatusCode,
                 ${pick(s, 'Customer', 'c', 'IsActive', 'CAST(1 AS bit)')} AS IsActive,
                 sa.SavingsAccountID, sa.CurrentBalance

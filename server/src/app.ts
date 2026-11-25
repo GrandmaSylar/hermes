@@ -59,7 +59,8 @@ const NOUN: Record<DepositKind, string> = { SAVINGS: 'savings account', SHARES: 
 function ineligible(kind: DepositKind, account: AccountInfo, minor: bigint, memberCode: string, branchCode: string): string | null {
   const noun = NOUN[kind];
   if (account.customerCode !== memberCode) return `That ${noun} does not belong to this member.`;
-  if (account.branchCode !== branchCode) return 'This member is not in your branch.';
+  // A member with no branch recorded (registered in the office app) belongs to every branch.
+  if (account.branchCode !== '' && account.branchCode !== branchCode) return 'This member is not in your branch.';
   if (account.accountStatus.toUpperCase() !== 'ACTIVE') return `The ${noun} is not active.`;
   if (account.isClosed) return `The ${noun} is closed.`;
   if (kind === 'SAVINGS' && account.isDormant) return 'The savings account is dormant. Take it to the office.';
