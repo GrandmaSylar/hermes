@@ -9,6 +9,7 @@ import type {
   DepositKind,
   DepositRow,
   InsertOutcome,
+  MemberLookup,
   MemberRow,
   Officer,
   Repo,
@@ -18,6 +19,8 @@ import type {
 } from './repo';
 import type { Config } from './config';
 import { smsPhone } from './sms';
+import * as registration from './mssql-registration';
+import type { RegistrationBody } from './registration';
 import { buildSchema, describe as describeSchema, has, nameExpr, pick, product, TABLES, type Schema } from './schema';
 
 /** The tag the core system filters on; the same value the existing channel writes. */
@@ -56,6 +59,7 @@ export class MssqlRepo implements Repo {
     log(`Core schema probed. ${on.join(' ')}`);
     if (!built.schema.shares) log(`Share deposits are off; missing: ${built.sharesMissing.join(', ')}`);
     if (!built.schema.sms) log(`Pending-deposit text messages are off; missing: ${built.smsMissing.join(', ')}`);
+    if (!built.schema.registration) log(`Member registration is off; missing: ${built.registrationMissing.join(', ')}`);
     return built.schema;
   }
 
@@ -568,6 +572,19 @@ export class MssqlRepo implements Repo {
       .input('type', sql.NVarChar(50), messageType)
       .query(`SELECT TOP 1 1 AS found FROM dbo.SMSHistory WHERE ReferenceNo = @ref AND MessageType = @type`);
     return result.recordset.length > 0;
+  }
+
+  async listMemberTypes() {
+    return registration.listMemberTypes(this.pool, this.schema);
+  }
+  async findMemberConflicts(lookup: MemberLookup) {
+    return registration.findMemberConflicts(this.pool, this.schema, lookup);
+  }
+  async findEarlierRegistration(officer: Officer, body: RegistrationBody) {
+    return registration.findEarlierRegistration(this.pool, officer, body);
+  }
+  async registerMember(officer: Officer, body: RegistrationBody) {
+    return registration.registerMember(this.pool, this.schema, officer, body, new Date());
   }
 
   async logSms(messageType: string, e: SmsLogEntry): Promise<void> {

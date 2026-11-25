@@ -7,6 +7,15 @@ import type { Config } from './config';
 import { fromMinor, isAmountText, toMinor } from './money';
 import { MAX_LOCAL_ID, storedReference } from './reference';
 import type { AccountInfo, DepositKind, Officer, Repo } from './repo';
+import {
+  memberTypeIsIndividual,
+  memberTypeRequiresGuardian,
+  memberTypeSharesOptional,
+  normaliseIdNumber,
+  registrationBody,
+  registrationProblems,
+  ID_TYPES,
+} from './registration';
 import type { PendingSmsNotifier } from './sms';
 import { Tokens } from './tokens';
 
@@ -132,6 +141,9 @@ export function buildApp(deps: AppDeps): FastifyInstance {
     branchCode: officer.branchCode,
   });
 
+  /** Registration is on once every table it writes to is visible to the server's database login. */
+  const registrationOn = () => repo.describeSchema?.().registrationEnabled === true;
+
   app.get('/health', async (_req, reply) => {
     try {
       await (repo as { ping?: () => Promise<void> }).ping?.();
@@ -204,7 +216,12 @@ export function buildApp(deps: AppDeps): FastifyInstance {
   app.get('/v1/me', { preHandler: requireOfficer }, async (req) => {
     const officer = req.officer!;
     const pending = await repo.pendingTotals(officer.id);
-    return { officer: profile(officer), limits: config.limits, pendingApproval: pending };
+    return {
+      officer: profile(officer),
+      limits: config.limits,
+      pendingApproval: pending,
+      capabilities: { registration: registrationOn() },
+    };
   });
 
   app.get('/v1/members', { preHandler: requireOfficer }, async (req, reply) => {
@@ -305,6 +322,93 @@ export function buildApp(deps: AppDeps): FastifyInstance {
       localTransactionId: body.localTransactionId,
       reason: 'This transaction id was already used for a different deposit.',
     });
+  });
+
+  // ---- member registration -------------------------------------------------
+
+  app.get('/v1/member-types', { preHandler: requireOfficer }, async () => {
+    const types = await repo.listMemberTypes();
+    return {
+      items: types
+        .filter((t) => memberTypeIsIndividual(t.code))
+        .map((t) => ({
+          code: t.code,
+          label: t.description || t.code,
+          sharesOptional: memberTypeSharesOptional(t.code),
+          guardianRequired: memberTypeRequiresGuardian(t.code),
+        })),
+    };
+  });
+
+  const checkBody = z.object({
+    nationalId: z.string().trim().max(30).optional().default(''),
+    voterIdNo: z.string().trim().max(30).optional().default(''),
+    nhisNo: z.string().trim().max(30).optional().default(''),
+    passportNo: z.string().trim().max(30).optional().default(''),
+    phone: z.string().trim().max(50).optional().default(''),
+    email: z.string().trim().max(150).optional().default(''),
+  });
+
+  /** Who already holds these IDs, phone numbers or email addresses (the form's live "already registered" check). */
+  app.post('/v1/members/check', { preHandler: requireOfficer }, async (req, reply) => {
+    const parsed = checkBody.safeParse(req.body);
+    if (!parsed.success) return fail(reply, 400, 'Invalid request.');
+    const b = parsed.data;
+    const conflicts = await repo.findMemberConflicts({
+      ids: {
+        nationalId: normaliseIdNumber('GHANA_CARD', b.nationalId),
+        voterIdNo: normaliseIdNumber('VOTER_ID', b.voterIdNo),
+        nhisNo: normaliseIdNumber('NHIS', b.nhisNo),
+        passportNo: normaliseIdNumber('PASSPORT', b.passportNo),
+      },
+      phone: b.phone,
+      email: b.email,
+    });
+    return { conflicts };
+  });
+
+  app.post('/v1/registrations', { preHandler: requireOfficer }, async (req, reply) => {
+    const officer = req.officer!;
+    if (!registrationOn()) return fail(reply, 503, 'Registering members from the field is not switched on yet.');
+    const parsed = registrationBody.safeParse(req.body);
+    if (!parsed.success) {
+      return fail(reply, 400, parsed.error.issues[0]?.message ?? 'Invalid registration.');
+    }
+    const body = parsed.data;
+    // Same text the registration form shows: ID numbers are tidied before they are checked or stored.
+    for (const type of ID_TYPES) body[type.field] = normaliseIdNumber(type.key, body[type.field]);
+    const reject = (reason: string) => reply.code(422).send({ status: 'REJECTED', localRegistrationId: body.localRegistrationId, reason });
+
+    const problems = registrationProblems(body, now());
+    if (problems.length > 0) return reject(problems.join('. ') + '.');
+
+    const types = await repo.listMemberTypes();
+    if (!types.some((t) => t.code === body.memberType)) return reject('That member type is not available.');
+
+    // A retry of a registration that already went through returns the same member.
+    const earlier = await repo.findEarlierRegistration(officer, body);
+    if (earlier) {
+      return reply.code(200).send({ status: 'DUPLICATE', localRegistrationId: body.localRegistrationId, serverId: earlier });
+    }
+
+    const conflicts = await repo.findMemberConflicts({
+      ids: { nationalId: body.nationalId, voterIdNo: body.voterIdNo, nhisNo: body.nhisNo, passportNo: body.passportNo },
+      phone: body.phone,
+      email: body.email,
+    });
+    if (conflicts.length > 0) {
+      const c = conflicts[0];
+      const who = c.memberName || `Member ${c.memberCode}`;
+      const isId = c.label !== 'Phone' && c.label !== 'Email';
+      return reject(
+        isId
+          ? `${c.label} ${c.value} already belongs to ${who} (member ${c.memberCode}).`
+          : `${c.label} ${c.value} already in use by ${who} (Code ${c.memberCode}).`,
+      );
+    }
+
+    const created = await repo.registerMember(officer, body);
+    return reply.code(201).send({ status: 'ACCEPTED', localRegistrationId: body.localRegistrationId, serverId: created.memberCode });
   });
 
   app.get('/v1/deposits', { preHandler: requireOfficer }, async (req, reply) => {

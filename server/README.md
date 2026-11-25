@@ -91,6 +91,16 @@ Checks against a real (dummy) database are skipped unless `HERMES_INTEGRATION=1`
 
 Port 80 and 443 are then taken, so skip Caddy. Use `deploy/docker-compose.behind-nginx.yml`, which publishes the server on `127.0.0.1:3000` only, and `deploy/nginx-field.conf` as a new server block for your name. Then `certbot --nginx -d <your name>` adds the certificate to that block. Leave existing sites alone. If the database container is on Docker's default bridge, create a network, attach the container to it (`docker network connect`, no restart needed) and set `DB_NETWORK` to that network; the server then reaches it by container name.
 
+### Member registration
+
+Bankers can register new individual members from the phone. The rules are copied from the core app's registration form (required fields, the four ID types with their formats, the guardian rule for under-18s and Kiddy Savings, beneficiaries totalling 100%, duplicate ID, phone and email checks), and the member is saved as pending (`StatusCode = 'PND'`) into `Customer`, `CustomerContact`, `CustomerAddress`, `CustomerEmployment`, `CustomerFinancial`, `CustomerBeneficiary`, `CustomerAlertPreferences`, `CustomerGuardian` and `CustomerCompliance` in one transaction. The office approves them as it does any other new member.
+
+It is off until the server's database login can see those tables. Run `deploy/grant-registration.sql` (INSERT and SELECT only, no UPDATE or DELETE), then restart the server: `GET /health` shows `registrationEnabled: true` and `GET /v1/me` tells the app it may offer registration.
+
+Where it differs from the office app: the new member also gets the banker's branch, a full name and the phone number, so the field app can list them straight away (the office app leaves branch and full name empty). A registration sent twice by the same banker for the same person returns the same member instead of creating a second one.
+
+Routes: `GET /v1/member-types`, `POST /v1/members/check` (who already holds an ID, phone or email) and `POST /v1/registrations`.
+
 ### Without Docker (pm2)
 
 The server is a plain Node app, so it can run under pm2 instead of a container (used on the test VPS). Needs Node 22 and pm2.

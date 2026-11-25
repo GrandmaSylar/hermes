@@ -1,3 +1,5 @@
+import type { IdValues, RegistrationBody } from './registration';
+
 /**
  * Everything the server needs from the core banking database, behind one
  * interface so the rules can be tested without SQL Server.
@@ -126,6 +128,27 @@ export interface SmsLogEntry {
   sentAt: Date;
 }
 
+/** A member type the registration form offers (CustomerType). */
+export interface MemberTypeRow {
+  code: string;
+  description: string;
+}
+
+/** Another member who already has the ID number, phone or email being registered. */
+export interface MemberConflict {
+  /** Plain label: "Ghana Card", "Phone", "Email". */
+  label: string;
+  value: string;
+  memberCode: string;
+  memberName: string;
+}
+
+export interface MemberLookup {
+  ids: IdValues;
+  phone?: string;
+  email?: string;
+}
+
 export interface Repo {
   /** Which optional rules and features this database supports (shown under GET /health). */
   describeSchema?(): Record<string, boolean>;
@@ -141,4 +164,12 @@ export interface Repo {
   getSmsRecipient(customerCode: string): Promise<SmsRecipient>;
   hasSmsLog(referenceNo: string, messageType: string): Promise<boolean>;
   logSms(messageType: string, entry: SmsLogEntry): Promise<void>;
+  // Member registration
+  listMemberTypes(): Promise<MemberTypeRow[]>;
+  /** Members that already hold one of these IDs, phone numbers or email addresses. */
+  findMemberConflicts(lookup: MemberLookup): Promise<MemberConflict[]>;
+  /** The member this banker already registered from the same details recently, so a retry returns the same member. */
+  findEarlierRegistration(officer: Officer, body: RegistrationBody): Promise<string | null>;
+  /** Creates the pending member and everything that belongs to them in one transaction. Returns the new member code. */
+  registerMember(officer: Officer, body: RegistrationBody): Promise<{ memberCode: string }>;
 }
