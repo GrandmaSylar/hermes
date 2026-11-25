@@ -1,6 +1,7 @@
 import { ApiError, type ApiClient, type PushItem, type PushRegistration } from '@/data/api/contract';
 import type { Repos } from '@/data/repositories';
 import type { RegistrationItem } from '@/domain/registration';
+import { kindForProduct } from '@/domain/deposit';
 import type { OutboxItem, Session } from '@/domain/types';
 
 export interface SyncReport {
@@ -65,6 +66,9 @@ export function syncOnce(deps: SyncDeps): Promise<SyncReport> {
 
 function toPushItem(item: OutboxItem): PushItem {
   return {
+    // A loan repayment has no deposit kind; the SAVINGS here is never sent (the client refuses it).
+    kind: kindForProduct(item.productType) ?? 'SAVINGS',
+    paymentMode: item.paymentMode,
     localTransactionId: item.localTransactionId,
     memberCode: item.memberCode,
     productType: item.productType,

@@ -29,7 +29,7 @@ async function setup() {
   await syncOnce({ repos, api, session });
   const member = (await repos.members.search('', 50)).find((m) => m.status === 'ACTIVE')!;
   const collect = async (amount: string) => {
-    const saved = await captureCollection(repos, session, { member, productType: 'SAVINGS_DEPOSIT', amount }, newId);
+    const saved = await captureCollection(repos, session, { member, productType: 'SAVINGS_DEPOSIT', amount, account: member.accounts.savings[0] }, newId);
     if (!saved.ok) throw new Error('capture failed');
     return saved.item.localTransactionId;
   };

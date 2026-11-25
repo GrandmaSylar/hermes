@@ -36,7 +36,7 @@ describe('sync engine', () => {
   test('a captured collection is delivered once and marked as pending approval', async () => {
     const { api, session, repos } = await setup();
     const member = await activeMember(repos);
-    const saved = await captureCollection(repos, session, { member, productType: 'SAVINGS_DEPOSIT', amount: '40' }, newId);
+    const saved = await captureCollection(repos, session, { member, productType: 'SAVINGS_DEPOSIT', amount: '40', account: member.accounts.savings[0] }, newId);
     expect(saved.ok).toBe(true);
 
     const report = await syncOnce({ repos, api, session });
@@ -51,8 +51,8 @@ describe('sync engine', () => {
     const { api, session, repos, offline } = await setup();
     const member = await activeMember(repos);
     offline.value = true;
-    await captureCollection(repos, session, { member, productType: 'SAVINGS_DEPOSIT', amount: '10' }, newId);
-    await captureCollection(repos, session, { member, productType: 'SHARE_CONTRIBUTION', amount: '20' }, newId);
+    await captureCollection(repos, session, { member, productType: 'SAVINGS_DEPOSIT', amount: '10', account: member.accounts.savings[0] }, newId);
+    await captureCollection(repos, session, { member, productType: 'SHARE_CONTRIBUTION', amount: '20', account: member.accounts.shares[0] }, newId);
 
     const down = await syncOnce({ repos, api, session });
     expect(down.offline).toBe(true);
@@ -67,7 +67,7 @@ describe('sync engine', () => {
   test('retry after a lost response cannot create a second entry', async () => {
     const { api, session, repos } = await setup();
     const member = await activeMember(repos);
-    const saved = await captureCollection(repos, session, { member, productType: 'SAVINGS_DEPOSIT', amount: '75' }, newId);
+    const saved = await captureCollection(repos, session, { member, productType: 'SAVINGS_DEPOSIT', amount: '75', account: member.accounts.savings[0] }, newId);
     if (!saved.ok) throw new Error('capture failed');
 
     // The server receives the item, but the phone never gets the answer.
@@ -79,7 +79,9 @@ describe('sync engine', () => {
         amount: saved.item.amount,
         reference: saved.item.reference,
         collectedAt: saved.item.collectedAt,
+        kind: 'SAVINGS',
         accountId: saved.item.accountId,
+        paymentMode: saved.item.paymentMode,
       },
     ]);
     expect(first.status).toBe('ACCEPTED');
@@ -95,7 +97,7 @@ describe('sync engine', () => {
   test('the same local id with different details is a conflict, never an overwrite', async () => {
     const { api, session, repos } = await setup();
     const member = await activeMember(repos);
-    const saved = await captureCollection(repos, session, { member, productType: 'SAVINGS_DEPOSIT', amount: '30' }, () => 'fixed-id');
+    const saved = await captureCollection(repos, session, { member, productType: 'SAVINGS_DEPOSIT', amount: '30', account: member.accounts.savings[0] }, () => 'fixed-id');
     expect(saved.ok).toBe(true);
     await syncOnce({ repos, api, session });
 
@@ -111,6 +113,8 @@ describe('sync engine', () => {
       collectedAt: new Date().toISOString(),
       createdAt: new Date().toISOString(),
       accountId: member.savingsAccountId,
+      accountLabel: null,
+      paymentMode: 'CASH',
     });
     const report = await syncOnce({ repos, api, session });
     expect(report.conflicts).toBe(1);
@@ -135,7 +139,7 @@ describe('sync engine', () => {
   test('items left in SENDING by a crash are recovered and sent', async () => {
     const { api, session, repos } = await setup();
     const member = await activeMember(repos);
-    const saved = await captureCollection(repos, session, { member, productType: 'SAVINGS_DEPOSIT', amount: '15' }, newId);
+    const saved = await captureCollection(repos, session, { member, productType: 'SAVINGS_DEPOSIT', amount: '15', account: member.accounts.savings[0] }, newId);
     if (!saved.ok) throw new Error('capture failed');
     await repos.outbox.markSending([saved.item.localTransactionId]);
     const report = await syncOnce({ repos, api, session });
@@ -145,7 +149,7 @@ describe('sync engine', () => {
   test('two syncs started together share one run', async () => {
     const { api, session, repos } = await setup();
     const member = await activeMember(repos);
-    await captureCollection(repos, session, { member, productType: 'SAVINGS_DEPOSIT', amount: '12' }, newId);
+    await captureCollection(repos, session, { member, productType: 'SAVINGS_DEPOSIT', amount: '12', account: member.accounts.savings[0] }, newId);
     const [a, b] = await Promise.all([syncOnce({ repos, api, session }), syncOnce({ repos, api, session })]);
     expect(a).toBe(b);
     expect(a.accepted).toBe(1);
@@ -155,24 +159,24 @@ describe('sync engine', () => {
     const { session, repos } = await setup();
     const member = await activeMember(repos);
     const tight: Session = { ...session, limits: { ...session.limits, maxUnsyncedItems: 2 } };
-    expect((await captureCollection(repos, tight, { member, productType: 'SAVINGS_DEPOSIT', amount: '1' }, newId)).ok).toBe(true);
-    expect((await captureCollection(repos, tight, { member, productType: 'SAVINGS_DEPOSIT', amount: '1' }, newId)).ok).toBe(true);
-    const third = await captureCollection(repos, tight, { member, productType: 'SAVINGS_DEPOSIT', amount: '1' }, newId);
+    expect((await captureCollection(repos, tight, { member, productType: 'SAVINGS_DEPOSIT', amount: '1', account: member.accounts.savings[0] }, newId)).ok).toBe(true);
+    expect((await captureCollection(repos, tight, { member, productType: 'SAVINGS_DEPOSIT', amount: '1', account: member.accounts.savings[0] }, newId)).ok).toBe(true);
+    const third = await captureCollection(repos, tight, { member, productType: 'SAVINGS_DEPOSIT', amount: '1', account: member.accounts.savings[0] }, newId);
     expect(third.ok).toBe(false);
   });
 
   test('a double tap with the same id saves one entry', async () => {
     const { session, repos } = await setup();
     const member = await activeMember(repos);
-    await captureCollection(repos, session, { member, productType: 'SAVINGS_DEPOSIT', amount: '9' }, () => 'same');
-    await captureCollection(repos, session, { member, productType: 'SAVINGS_DEPOSIT', amount: '9' }, () => 'same');
+    await captureCollection(repos, session, { member, productType: 'SAVINGS_DEPOSIT', amount: '9', account: member.accounts.savings[0] }, () => 'same');
+    await captureCollection(repos, session, { member, productType: 'SAVINGS_DEPOSIT', amount: '9', account: member.accounts.savings[0] }, () => 'same');
     expect((await repos.outbox.list(10)).length).toBe(1);
   });
 
   test('a session that is no longer valid is reported, and items stay waiting', async () => {
     const { session, repos } = await setup();
     const member = await activeMember(repos);
-    await captureCollection(repos, session, { member, productType: 'SAVINGS_DEPOSIT', amount: '5' }, newId);
+    await captureCollection(repos, session, { member, productType: 'SAVINGS_DEPOSIT', amount: '5', account: member.accounts.savings[0] }, newId);
     const expired = new MockApi({ memberCount: 10 });
     expired.pushTransactions = async () => {
       throw new ApiError('AUTH', 'Session expired.');
@@ -227,7 +231,7 @@ describe('core system limits', () => {
   test('a server error is reported and items stay waiting, instead of crashing the sync', async () => {
     const { api, session, repos } = await setup();
     const member = await activeMember(repos);
-    await captureCollection(repos, session, { member, productType: 'SAVINGS_DEPOSIT', amount: '5' }, newId);
+    await captureCollection(repos, session, { member, productType: 'SAVINGS_DEPOSIT', amount: '5', account: member.accounts.savings[0] }, newId);
     const broken = new MockApi({ memberCount: 10 });
     broken.pushTransactions = async () => {
       throw new ApiError('SERVER', 'The server had a problem. Try again shortly.');

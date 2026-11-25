@@ -12,7 +12,7 @@ import type {
 import type { UnsyncedTotals } from '@/domain/capture';
 import type { RegistrationItem } from '@/domain/registration';
 import { toMinor } from '@/domain/money';
-import type { Member, OfficeStatus, OutboxItem, OutboxStatus, ProductType } from '@/domain/types';
+import type { AccountOption, Member, MemberAccounts, OfficeStatus, OutboxItem, OutboxStatus, PaymentMode, ProductType } from '@/domain/types';
 
 interface MemberRow {
   member_code: string;
@@ -27,6 +27,16 @@ interface MemberRow {
   my_customer: number;
   collect_count: number;
   savings_account_id: number | null;
+}
+
+interface AccountRow {
+  member_code: string;
+  kind: 'SAVINGS' | 'SHARES';
+  account_id: number;
+  number: string;
+  product_code: string;
+  product_name: string;
+  balance: string;
 }
 
 interface OutboxRow {
@@ -46,6 +56,8 @@ interface OutboxRow {
   office_status: OfficeStatus | null;
   office_reason: string | null;
   office_decided_at: string | null;
+  account_label: string | null;
+  payment_mode: PaymentMode;
 }
 
 /**
@@ -55,7 +67,7 @@ interface OutboxRow {
 const balanceOut = (value: string | null): string => value ?? '';
 const balanceIn = (value: string): string | null => (value === '' ? null : value);
 
-const toMember = (row: MemberRow): Member => ({
+const toMember = (row: MemberRow, accounts: MemberAccounts): Member => ({
   memberCode: row.member_code,
   name: row.name,
   phone: row.phone,
@@ -64,6 +76,7 @@ const toMember = (row: MemberRow): Member => ({
   balances: { savings: row.savings, shares: balanceIn(row.shares), loan: balanceIn(row.loan) },
   asOf: row.as_of,
   savingsAccountId: row.savings_account_id,
+  accounts,
   myCustomer: row.my_customer === 1,
   collectCount: row.collect_count,
 });
@@ -85,13 +98,45 @@ const toOutbox = (row: OutboxRow): OutboxItem => ({
   officeStatus: row.office_status,
   officeReason: row.office_reason,
   officeDecidedAt: row.office_decided_at,
+  accountLabel: row.account_label,
+  paymentMode: row.payment_mode ?? 'CASH',
 });
 
 /** Escapes LIKE wildcards so user input is matched literally. */
 const likeEscape = (text: string) => text.replace(/[\\%_]/g, (c) => `\\${c}`);
 
+const toAccountOption = (row: AccountRow): AccountOption => ({
+  id: row.account_id,
+  number: row.number,
+  productCode: row.product_code,
+  productName: row.product_name,
+  balance: row.balance,
+});
+
+/** Rows per IN (...) list. Far below SQLite's limit on bound parameters. */
+const ACCOUNT_CHUNK = 200;
+
 class SqliteMemberRepo implements MemberRepo {
   constructor(private readonly db: SQLite.SQLiteDatabase) {}
+
+  /** Attaches each member's accounts, read in a few chunked queries rather than one per member. */
+  private async withAccounts(rows: MemberRow[]): Promise<Member[]> {
+    const byMember = new Map<string, MemberAccounts>();
+    for (const row of rows) byMember.set(row.member_code, { savings: [], shares: [] });
+    const codes = [...byMember.keys()];
+    for (let i = 0; i < codes.length; i += ACCOUNT_CHUNK) {
+      const chunk = codes.slice(i, i + ACCOUNT_CHUNK);
+      const found = await this.db.getAllAsync<AccountRow>(
+        `SELECT * FROM member_accounts WHERE member_code IN (${chunk.map(() => '?').join(', ')}) ORDER BY account_id`,
+        ...chunk,
+      );
+      for (const a of found) {
+        const accounts = byMember.get(a.member_code);
+        if (accounts) (a.kind === 'SHARES' ? accounts.shares : accounts.savings).push(toAccountOption(a));
+      }
+    }
+    return rows.map((row) => toMember(row, byMember.get(row.member_code) ?? { savings: [], shares: [] }));
+  }
 
   async upsertMany(members: ServerMember[]): Promise<void> {
     if (members.length === 0) return;
@@ -105,6 +150,11 @@ class SqliteMemberRepo implements MemberRepo {
         branch_code = excluded.branch_code, savings = excluded.savings, shares = excluded.shares,
         loan = excluded.loan, as_of = excluded.as_of, search_text = excluded.search_text,
         savings_account_id = COALESCE(excluded.savings_account_id, savings_account_id)
+    `);
+    const clearAccounts = await this.db.prepareAsync('DELETE FROM member_accounts WHERE member_code = $code');
+    const addAccount = await this.db.prepareAsync(`
+      INSERT OR REPLACE INTO member_accounts (member_code, kind, account_id, number, product_code, product_name, balance)
+      VALUES ($code, $kind, $id, $number, $productCode, $productName, $balance)
     `);
     try {
       await this.db.withTransactionAsync(async () => {
@@ -122,10 +172,27 @@ class SqliteMemberRepo implements MemberRepo {
             $asOf: m.asOf,
             $search: `${m.memberCode} ${m.name} ${m.phone}`.toLowerCase(),
           });
+          // The server's list is the whole truth: drop the old rows so a closed account disappears.
+          await clearAccounts.executeAsync({ $code: m.memberCode });
+          for (const [kind, list] of [['SAVINGS', m.accounts.savings], ['SHARES', m.accounts.shares]] as const) {
+            for (const a of list) {
+              await addAccount.executeAsync({
+                $code: m.memberCode,
+                $kind: kind,
+                $id: a.id,
+                $number: a.number,
+                $productCode: a.productCode,
+                $productName: a.productName,
+                $balance: a.balance,
+              });
+            }
+          }
         }
       });
     } finally {
       await statement.finalizeAsync();
+      await clearAccounts.finalizeAsync();
+      await addAccount.finalizeAsync();
     }
   }
 
@@ -136,7 +203,7 @@ class SqliteMemberRepo implements MemberRepo {
         'SELECT * FROM members ORDER BY name LIMIT ?',
         limit,
       );
-      return rows.map(toMember);
+      return this.withAccounts(rows);
     }
     const escaped = likeEscape(q);
     const rows = await this.db.getAllAsync<MemberRow>(
@@ -149,12 +216,14 @@ class SqliteMemberRepo implements MemberRepo {
       `${escaped}%`,
       limit,
     );
-    return rows.map(toMember);
+    return this.withAccounts(rows);
   }
 
   async get(memberCode: string): Promise<Member | null> {
     const row = await this.db.getFirstAsync<MemberRow>('SELECT * FROM members WHERE member_code = ?', memberCode);
-    return row ? toMember(row) : null;
+    if (!row) return null;
+    const [member] = await this.withAccounts([row]);
+    return member;
   }
 
   async count(): Promise<number> {
@@ -192,7 +261,7 @@ class SqliteMemberRepo implements MemberRepo {
       'SELECT * FROM members WHERE my_customer = 1 ORDER BY name LIMIT ?',
       limit,
     );
-    return rows.map(toMember);
+    return this.withAccounts(rows);
   }
 
   async frequent(limit: number): Promise<Member[]> {
@@ -200,7 +269,7 @@ class SqliteMemberRepo implements MemberRepo {
       'SELECT * FROM members WHERE collect_count > 0 AND my_customer = 0 ORDER BY collect_count DESC, name LIMIT ?',
       limit,
     );
-    return rows.map(toMember);
+    return this.withAccounts(rows);
   }
 }
 
@@ -211,8 +280,8 @@ class SqliteOutboxRepo implements OutboxRepo {
     // The primary key on local_txn_id makes a double tap harmless: the second insert is ignored.
     await this.db.runAsync(
       `INSERT OR IGNORE INTO outbox
-       (local_txn_id, member_code, member_name, product_type, amount, reference, collected_at, status, attempts, created_at, account_id)
-       VALUES (?, ?, ?, ?, ?, ?, ?, 'PENDING', 0, ?, ?)`,
+       (local_txn_id, member_code, member_name, product_type, amount, reference, collected_at, status, attempts, created_at, account_id, account_label, payment_mode)
+       VALUES (?, ?, ?, ?, ?, ?, ?, 'PENDING', 0, ?, ?, ?, ?)`,
       item.localTransactionId,
       item.memberCode,
       item.memberName,
@@ -222,6 +291,8 @@ class SqliteOutboxRepo implements OutboxRepo {
       item.collectedAt,
       item.createdAt,
       item.accountId,
+      item.accountLabel,
+      item.paymentMode,
     );
   }
 

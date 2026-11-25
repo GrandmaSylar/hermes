@@ -1,6 +1,7 @@
 import { router, useLocalSearchParams } from 'expo-router';
 import { useEffect, useState } from 'react';
 import { ScrollView, Text, View } from 'react-native';
+import { depositTitle, depositUnavailableReason } from '@/domain/deposit';
 import { formatAmount } from '@/domain/money';
 import type { Member } from '@/domain/types';
 import { useApp } from '@/state/AppProvider';
@@ -61,7 +62,19 @@ export default function MemberScreen() {
         </Text>
       </Card>
 
-      <Button title="Collect" onPress={() => router.push(`/collect/${member.memberCode}`)} disabled={!active} />
+      {(['savings', 'shares'] as const).map((type) => {
+        const reason = depositUnavailableReason(member, type);
+        return (
+          <View key={type} style={{ gap: 4 }}>
+            <Button
+              title={depositTitle(type)}
+              onPress={() => router.push(`/collect/${member.memberCode}?type=${type}`)}
+              disabled={reason !== null}
+            />
+            {reason && active ? <Text style={{ color: colors.warn, fontSize: 14 }}>{reason}</Text> : null}
+          </View>
+        );
+      })}
       <Button
         title={member.myCustomer ? '★ Remove from My customers' : '☆ Add to My customers'}
         variant="secondary"

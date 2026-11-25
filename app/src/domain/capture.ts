@@ -1,5 +1,6 @@
 import { isAmountText, toMinor } from './money';
-import type { Member, MobilizerLimits, ProductType } from './types';
+import { accountsFor, depositUnavailableReason, typeForProduct } from './deposit';
+import type { AccountOption, Member, MobilizerLimits, PaymentMode, ProductType } from './types';
 
 export interface UnsyncedTotals {
   count: number;
@@ -11,6 +12,12 @@ export interface CaptureInput {
   member: Member;
   productType: ProductType;
   amount: string;
+  /** The account the deposit goes to. Required for savings and shares deposits. */
+  account?: AccountOption | null;
+  /** Defaults to cash. */
+  paymentMode?: PaymentMode;
+  /** The modes this build offers. Defaults to cash only. */
+  allowedPaymentModes?: PaymentMode[];
 }
 
 /**
@@ -26,8 +33,18 @@ export function validateCapture(
   if (input.member.status !== 'ACTIVE') {
     return 'This member is not active, so a collection cannot be captured.';
   }
-  if (input.productType === 'SAVINGS_DEPOSIT' && input.member.savingsAccountId == null) {
-    return 'This member has no savings account on this phone yet. Sync, then try again.';
+  const type = typeForProduct(input.productType);
+  if (type) {
+    const unavailable = depositUnavailableReason(input.member, type);
+    if (unavailable) return unavailable;
+    if (!input.account) return 'Choose the account for this deposit.';
+    // The chosen account must be one of this member's accounts of the right type.
+    if (!accountsFor(input.member, type).some((a) => a.id === input.account?.id)) {
+      return 'That account does not belong to this member. Choose again.';
+    }
+  }
+  if (!(input.allowedPaymentModes ?? ['CASH']).includes(input.paymentMode ?? 'CASH')) {
+    return 'This payment mode is not available yet. Choose Cash.';
   }
   if (!input.amount.trim()) return 'Enter the amount.';
   if (!isAmountText(input.amount)) return 'Enter a valid amount with at most two decimals.';

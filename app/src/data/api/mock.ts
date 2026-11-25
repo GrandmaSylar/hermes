@@ -1,5 +1,6 @@
+import { kindForProduct, sumBalances } from '@/domain/deposit';
 import { toMinor } from '@/domain/money';
-import type { MobilizerLimits, Session } from '@/domain/types';
+import type { AccountOption, MobilizerLimits, Session } from '@/domain/types';
 import {
   ApiError,
   type ApiClient,
@@ -47,6 +48,22 @@ export function buildMockMembers(count: number, asOf: string): ServerMember[] {
   for (let i = 0; i < count; i++) {
     const seed = (i * 2654435761) >>> 0;
     const status = i % 53 === 0 ? 'INACTIVE' : i % 97 === 0 ? 'PENDING_APPROVAL' : 'ACTIVE';
+    const n = i + 1;
+    // Demo spread: every member has one savings account, every fourth a second one;
+    // two members in three have a shares holding, every seventh a second one.
+    const savings: AccountOption[] = [
+      { id: 500000 + i, number: `${n}-KS`, productCode: 'KS', productName: 'Ordinary Savings', balance: money(seed % 500000) },
+    ];
+    if (i % 4 === 1) {
+      savings.push({ id: 700000 + i, number: `${n}-SU`, productCode: 'SU', productName: 'Susu Savings', balance: money((seed >> 4) % 90000) });
+    }
+    const shares: AccountOption[] = [];
+    if (i % 3 !== 2) {
+      shares.push({ id: 800000 + i, number: `${n}-SH`, productCode: 'SH', productName: 'Ordinary Shares', balance: money((seed >> 3) % 200000) });
+      if (i % 7 === 0) {
+        shares.push({ id: 900000 + i, number: `${n}-PS`, productCode: 'PS', productName: 'Preference Shares', balance: money((seed >> 6) % 50000) });
+      }
+    }
     members.push({
       memberCode: String(100001 + i),
       name: `${FIRST[i % FIRST.length]} ${LAST[Math.floor(i / FIRST.length) % LAST.length]}`,
@@ -54,12 +71,13 @@ export function buildMockMembers(count: number, asOf: string): ServerMember[] {
       status,
       branchCode: '001',
       balances: {
-        savings: money(seed % 500000),
-        shares: money((seed >> 3) % 200000),
+        savings: sumBalances(savings.map((a) => a.balance)),
+        shares: sumBalances(shares.map((a) => a.balance)),
         loan: i % 3 === 0 ? money((seed >> 5) % 800000) : '0.00',
       },
       asOf,
       savingsAccountId: 500000 + i,
+      accounts: { savings, shares },
     });
   }
   return members;
@@ -69,12 +87,14 @@ export interface MockApiOptions {
   memberCount?: number;
   /** Return true to simulate a lost connection for this call. */
   failNetwork?: () => boolean;
+  /** Demo toggle: offer Mobile Money as a payment mode. Off by default, like the real server. */
+  mobileMoney?: boolean;
   now?: () => Date;
 }
 
 export class MockApi implements ApiClient {
   /** The mock behaves like the full target API, so every feature can be developed and tested. */
-  readonly capabilities: ApiCapabilities = { otp: true, registration: true, officeDecisions: true, shareContribution: true, loanRepayment: true };
+  readonly capabilities: ApiCapabilities;
 
   private readonly members: ServerMember[];
   private readonly seen = new Map<string, { fingerprint: string; serverId: string }>();
@@ -86,6 +106,14 @@ export class MockApi implements ApiClient {
     const now = (options.now ?? (() => new Date()))();
     this.members = buildMockMembers(options.memberCount ?? 5000, now.toISOString());
     this.failNetwork = options.failNetwork ?? (() => false);
+    this.capabilities = {
+      otp: true,
+      registration: true,
+      officeDecisions: true,
+      mobileMoney: options.mobileMoney ?? false,
+      shareContribution: true,
+      loanRepayment: true,
+    };
   }
 
   private guard() {
@@ -201,7 +229,7 @@ export class MockApi implements ApiClient {
 
   private accept(session: Session, item: PushItem): PushResult {
     const key = `${session.deviceId}:${item.localTransactionId}`;
-    const fingerprint = [item.memberCode, item.productType, item.amount, item.collectedAt].join('|');
+    const fingerprint = [item.memberCode, item.productType, item.kind, item.accountId, item.amount, item.collectedAt, item.paymentMode].join('|');
     const existing = this.seen.get(key);
     if (existing) {
       return existing.fingerprint === fingerprint
@@ -222,6 +250,16 @@ export class MockApi implements ApiClient {
     }
     if (toMinor(item.amount) > toMinor(LIMITS.maxSingleAmount)) {
       return { localTransactionId: item.localTransactionId, status: 'REJECTED', reason: 'Amount exceeds the single-collection limit.' };
+    }
+    if (item.paymentMode !== 'CASH') {
+      return { localTransactionId: item.localTransactionId, status: 'REJECTED', reason: 'Only cash deposits are accepted.' };
+    }
+    const kind = kindForProduct(item.productType);
+    if (kind) {
+      const accounts = kind === 'SAVINGS' ? member.accounts.savings : member.accounts.shares;
+      if (kind !== item.kind || !accounts.some((a) => a.id === item.accountId)) {
+        return { localTransactionId: item.localTransactionId, status: 'REJECTED', reason: 'That account does not belong to this member.' };
+      }
     }
     if (item.productType === 'LOAN_REPAYMENT' && toMinor(member.balances.loan ?? '0') === 0n) {
       return { localTransactionId: item.localTransactionId, status: 'REJECTED', reason: 'Member has no outstanding loan.' };

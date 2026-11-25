@@ -1,4 +1,4 @@
-import type { MemberBalances, MobilizerLimits, OfficeStatus, ProductType, Session } from '@/domain/types';
+import type { DepositKind, MemberAccounts, MemberBalances, MobilizerLimits, OfficeStatus, PaymentMode, ProductType, Session } from '@/domain/types';
 
 /**
  * The contract the app expects from the core banking system's field API.
@@ -29,6 +29,11 @@ export interface ServerMember {
   asOf: string;
   /** Present when the API can supply it with the member. */
   savingsAccountId?: number | null;
+  /**
+   * Every account a deposit can go to. Always present: an older server that
+   * sends none gets a single savings entry built from savingsAccountId.
+   */
+  accounts: MemberAccounts;
 }
 
 export interface MemberPage {
@@ -45,8 +50,11 @@ export interface PushItem {
   amount: string;
   reference: string | null;
   collectedAt: string;
-  /** The member's savings account at the core. Required for a savings deposit. */
+  /** SAVINGS or SHARES, from the product. Decides what accountId means. */
+  kind: DepositKind;
+  /** The savings account id, or the share holding id, at the core. */
   accountId: number | null;
+  paymentMode: PaymentMode;
 }
 
 export type PushResultStatus = 'ACCEPTED' | 'DUPLICATE' | 'REJECTED' | 'CONFLICT';
@@ -116,6 +124,8 @@ export interface ApiCapabilities {
   otp: boolean;
   /** New members can be registered from the field. */
   registration: boolean;
+  /** Mobile Money can be offered as a payment mode. Off until the core can record it as such. */
+  mobileMoney: boolean;
   shareContribution: boolean;
   loanRepayment: boolean;
 }
