@@ -5,7 +5,7 @@ import { ALLOW_UNENCRYPTED_DB } from '@/config';
 
 const DB_NAME = 'qss.db';
 const KEY_NAME = 'qss.db.key';
-const SCHEMA_VERSION = 3;
+const SCHEMA_VERSION = 4;
 
 /** 256-bit random key, created once and kept only in the device keystore. */
 async function getOrCreateKey(): Promise<string> {
@@ -96,6 +96,14 @@ async function migrate(db: SQLite.SQLiteDatabase): Promise<void> {
       await db.execAsync(`
         ALTER TABLE members ADD COLUMN savings_account_id INTEGER;
         ALTER TABLE outbox ADD COLUMN account_id INTEGER;
+      `);
+    }
+    if (current < 4) {
+      // What the office decided about each delivered collection.
+      await db.execAsync(`
+        ALTER TABLE outbox ADD COLUMN office_status TEXT;
+        ALTER TABLE outbox ADD COLUMN office_reason TEXT;
+        ALTER TABLE outbox ADD COLUMN office_decided_at TEXT;
       `);
     }
     await db.execAsync(`PRAGMA user_version = ${SCHEMA_VERSION}`);

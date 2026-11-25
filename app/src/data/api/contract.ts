@@ -1,4 +1,4 @@
-import type { MemberBalances, MobilizerLimits, ProductType, Session } from '@/domain/types';
+import type { MemberBalances, MobilizerLimits, OfficeStatus, ProductType, Session } from '@/domain/types';
 
 /**
  * The contract the app expects from the core banking system's field API.
@@ -100,7 +100,18 @@ export interface SavingsAccountPage {
  * is off, so it never offers an action the core would refuse. Flags turn on as
  * the core ships support (see docs/core-api-dev-brief.md).
  */
+/** What the office has decided about one collection the banker sent. */
+export interface OfficeDecision {
+  localTransactionId: string;
+  status: OfficeStatus;
+  decidedAt: string | null;
+  /** Present when the office refused it. */
+  reason: string | null;
+}
+
 export interface ApiCapabilities {
+  /** The server can say what the office decided about each collection. */
+  officeDecisions: boolean;
   /** Sign-in has a second step: an SMS code. */
   otp: boolean;
   /** New members can be registered from the field. */
@@ -129,5 +140,7 @@ export interface ApiClient {
   pullSavingsAccounts(session: Session, cursor: string | null): Promise<SavingsAccountPage>;
   pushTransactions(session: Session, items: PushItem[]): Promise<PushResult[]>;
   pushRegistrations(session: Session, items: PushRegistration[]): Promise<RegistrationResult[]>;
+  /** The office's decisions on collections changed since the given time (or the latest ones if null). */
+  pullDecisions(session: Session, since: string | null): Promise<OfficeDecision[]>;
   limits(session: Session): Promise<MobilizerLimits>;
 }

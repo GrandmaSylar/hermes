@@ -44,6 +44,13 @@ export interface Member {
   collectCount: number;
 }
 
+/**
+ * What the office has done with a collection that reached it. PENDING: waiting
+ * for approval. APPROVED: posted to the member's account. VERIFIED: checked at
+ * the supervisor's end-of-day. REJECTED: refused, with a reason.
+ */
+export type OfficeStatus = 'PENDING' | 'APPROVED' | 'VERIFIED' | 'REJECTED';
+
 export interface OutboxItem {
   localTransactionId: string;
   memberCode: string;
@@ -61,6 +68,10 @@ export interface OutboxItem {
   createdAt: string;
   /** The core system's savings account id, copied from the member when the item was captured. */
   accountId: number | null;
+  /** The office's decision, once the item has reached it. Null until the app hears back. */
+  officeStatus: OfficeStatus | null;
+  officeReason: string | null;
+  officeDecidedAt: string | null;
 }
 
 export interface MobilizerLimits {

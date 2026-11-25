@@ -1,4 +1,4 @@
-import type { SavingsAccountInfo, ServerMember } from '@/data/api/contract';
+import type { OfficeDecision, SavingsAccountInfo, ServerMember } from '@/data/api/contract';
 import type {
   KvRepo,
   MemberRepo,
@@ -75,7 +75,16 @@ class MemoryOutbox implements OutboxRepo {
   async enqueue(item: NewOutboxItem) {
     // Same as INSERT OR IGNORE on the primary key.
     if (this.rows.has(item.localTransactionId)) return;
-    this.rows.set(item.localTransactionId, { ...item, status: 'PENDING', attempts: 0, lastError: null, serverId: null });
+    this.rows.set(item.localTransactionId, {
+      ...item,
+      status: 'PENDING',
+      attempts: 0,
+      lastError: null,
+      serverId: null,
+      officeStatus: null,
+      officeReason: null,
+      officeDecidedAt: null,
+    });
   }
   async list(limit: number) {
     return [...this.rows.values()].sort((a, b) => b.createdAt.localeCompare(a.createdAt)).slice(0, limit);
@@ -114,6 +123,24 @@ class MemoryOutbox implements OutboxRepo {
   async unsyncedTotals(): Promise<UnsyncedTotals> {
     const open = [...this.rows.values()].filter((i) => i.status === 'PENDING' || i.status === 'SENDING');
     return { count: open.length, amountMinor: open.reduce((s, i) => s + toMinor(i.amount), 0n) };
+  }
+  async awaitingDecision() {
+    return [...this.rows.values()].filter(
+      (i) => i.status === 'SYNCED' && (i.officeStatus === null || i.officeStatus === 'PENDING' || i.officeStatus === 'APPROVED'),
+    ).length;
+  }
+  async applyOfficeDecisions(decisions: OfficeDecision[]) {
+    let changed = 0;
+    for (const d of decisions) {
+      const i = this.rows.get(d.localTransactionId);
+      if (!i || i.status !== 'SYNCED') continue;
+      if (i.officeStatus === d.status && i.officeReason === d.reason && i.officeDecidedAt === d.decidedAt) continue;
+      i.officeStatus = d.status;
+      i.officeReason = d.reason;
+      i.officeDecidedAt = d.decidedAt;
+      changed += 1;
+    }
+    return changed;
   }
   async forDay(day: string) {
     return [...this.rows.values()].filter((i) => i.collectedAt.slice(0, 10) === day);

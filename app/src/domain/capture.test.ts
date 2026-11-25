@@ -73,6 +73,9 @@ describe('computeDayMetrics', () => {
     serverId: null,
     createdAt: '2026-11-14T08:00:00.000Z',
     accountId: 500001,
+    officeStatus: null,
+    officeReason: null,
+    officeDecidedAt: null,
   });
 
   test('credits are everything received, debits are rejected items, net is the difference', () => {

@@ -4,6 +4,7 @@ import {
   type ApiCapabilities,
   type ApiClient,
   type MemberPage,
+  type OfficeDecision,
   type PushItem,
   type PushRegistration,
   type PushResult,
@@ -111,6 +112,7 @@ export class HttpApi implements ApiClient {
   readonly capabilities: ApiCapabilities = {
     otp: false,
     registration: false,
+    officeDecisions: true,
     shareContribution: false,
     loanRepayment: false,
   };
@@ -252,6 +254,29 @@ export class HttpApi implements ApiClient {
       }
       throw error;
     }
+  }
+
+  /**
+   * What the office has done with this banker's collections. The server reports
+   * the core system's own words; only the four the app knows are passed on.
+   */
+  async pullDecisions(session: Session, since: string | null): Promise<OfficeDecision[]> {
+    const query = `limit=500${since ? `&since=${encodeURIComponent(since)}` : ''}`;
+    const body = asRecord(await this.send(session, 'GET', `${V1}/deposits?${query}`));
+    const decisions: OfficeDecision[] = [];
+    for (const row of Array.isArray(body.items) ? body.items.map(asRecord) : []) {
+      const status = asText(row.status).trim().toUpperCase();
+      if (status !== 'PENDING' && status !== 'APPROVED' && status !== 'VERIFIED' && status !== 'REJECTED') continue;
+      const id = asText(row.localTransactionId);
+      if (!id) continue;
+      decisions.push({
+        localTransactionId: id,
+        status,
+        decidedAt: asText(row.decidedAt) || null,
+        reason: status === 'REJECTED' ? asText(row.reason) || null : null,
+      });
+    }
+    return decisions;
   }
 
   async pushRegistrations(_session: Session, _items: PushRegistration[]): Promise<RegistrationResult[]> {

@@ -5,6 +5,7 @@ import {
   type ApiClient,
   type ApiCapabilities,
   type MemberPage,
+  type OfficeDecision,
   type SavingsAccountPage,
   type SignInResult,
   type PushItem,
@@ -73,7 +74,7 @@ export interface MockApiOptions {
 
 export class MockApi implements ApiClient {
   /** The mock behaves like the full target API, so every feature can be developed and tested. */
-  readonly capabilities: ApiCapabilities = { otp: true, registration: true, shareContribution: true, loanRepayment: true };
+  readonly capabilities: ApiCapabilities = { otp: true, registration: true, officeDecisions: true, shareContribution: true, loanRepayment: true };
 
   private readonly members: ServerMember[];
   private readonly seen = new Map<string, { fingerprint: string; serverId: string }>();
@@ -148,6 +149,20 @@ export class MockApi implements ApiClient {
   async pushTransactions(session: Session, items: PushItem[]): Promise<PushResult[]> {
     this.guard();
     return items.map((item) => this.accept(session, item));
+  }
+
+  /** Demo: the office approves everything it has received, the next time the app asks. */
+  async pullDecisions(session: Session, _since: string | null = null): Promise<OfficeDecision[]> {
+    this.guard();
+    const prefix = `${session.deviceId}:`;
+    return [...this.seen.keys()]
+      .filter((key) => key.startsWith(prefix))
+      .map((key) => ({
+        localTransactionId: key.slice(prefix.length),
+        status: 'APPROVED' as const,
+        decidedAt: new Date().toISOString(),
+        reason: null,
+      }));
   }
 
   private readonly registrationsSeen = new Map<string, { fingerprint: string; serverId: string }>();

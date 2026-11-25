@@ -1,5 +1,5 @@
 import type * as SQLite from 'expo-sqlite';
-import type { SavingsAccountInfo, ServerMember } from '@/data/api/contract';
+import type { OfficeDecision, SavingsAccountInfo, ServerMember } from '@/data/api/contract';
 import type {
   KvRepo,
   MemberRepo,
@@ -12,7 +12,7 @@ import type {
 import type { UnsyncedTotals } from '@/domain/capture';
 import type { RegistrationItem } from '@/domain/registration';
 import { toMinor } from '@/domain/money';
-import type { Member, OutboxItem, OutboxStatus, ProductType } from '@/domain/types';
+import type { Member, OfficeStatus, OutboxItem, OutboxStatus, ProductType } from '@/domain/types';
 
 interface MemberRow {
   member_code: string;
@@ -43,6 +43,9 @@ interface OutboxRow {
   server_id: string | null;
   created_at: string;
   account_id: number | null;
+  office_status: OfficeStatus | null;
+  office_reason: string | null;
+  office_decided_at: string | null;
 }
 
 /**
@@ -79,6 +82,9 @@ const toOutbox = (row: OutboxRow): OutboxItem => ({
   serverId: row.server_id,
   createdAt: row.created_at,
   accountId: row.account_id,
+  officeStatus: row.office_status,
+  officeReason: row.office_reason,
+  officeDecidedAt: row.office_decided_at,
 });
 
 /** Escapes LIKE wildcards so user input is matched literally. */
@@ -285,6 +291,35 @@ class SqliteOutboxRepo implements OutboxRepo {
       day,
     );
     return rows.map(toOutbox);
+  }
+
+  async awaitingDecision(): Promise<number> {
+    const row = await this.db.getFirstAsync<{ n: number }>(
+      "SELECT COUNT(*) AS n FROM outbox WHERE status = 'SYNCED' AND (office_status IS NULL OR office_status = 'PENDING' OR office_status = 'APPROVED')",
+    );
+    return row?.n ?? 0;
+  }
+
+  async applyOfficeDecisions(decisions: OfficeDecision[]): Promise<number> {
+    let changed = 0;
+    await this.db.withTransactionAsync(async () => {
+      for (const d of decisions) {
+        const result = await this.db.runAsync(
+          `UPDATE outbox SET office_status = ?, office_reason = ?, office_decided_at = ?
+           WHERE local_txn_id = ? AND status = 'SYNCED'
+             AND (office_status IS NOT ? OR office_reason IS NOT ? OR office_decided_at IS NOT ?)`,
+          d.status,
+          d.reason,
+          d.decidedAt,
+          d.localTransactionId,
+          d.status,
+          d.reason,
+          d.decidedAt,
+        );
+        changed += result.changes;
+      }
+    });
+    return changed;
   }
 }
 

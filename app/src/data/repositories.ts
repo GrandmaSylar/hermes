@@ -1,4 +1,4 @@
-import type { SavingsAccountInfo, ServerMember } from './api/contract';
+import type { OfficeDecision, SavingsAccountInfo, ServerMember } from './api/contract';
 import type { Member, OutboxItem, OutboxStatus } from '@/domain/types';
 import type { UnsyncedTotals } from '@/domain/capture';
 import type { RegistrationItem } from '@/domain/registration';
@@ -26,7 +26,7 @@ export interface MemberRepo {
 
 export type NewOutboxItem = Omit<
   OutboxItem,
-  'status' | 'attempts' | 'lastError' | 'serverId'
+  'status' | 'attempts' | 'lastError' | 'serverId' | 'officeStatus' | 'officeReason' | 'officeDecidedAt'
 >;
 
 export interface OutboxRepo {
@@ -47,6 +47,13 @@ export interface OutboxRepo {
   unsyncedTotals(): Promise<UnsyncedTotals>;
   /** Items collected within a UTC day, "YYYY-MM-DD". */
   forDay(day: string): Promise<OutboxItem[]>;
+  /** How many delivered items the office has not yet finished with (no decision, or still pending). */
+  awaitingDecision(): Promise<number>;
+  /**
+   * Records the office's decisions on delivered items. Decisions for items not on
+   * this phone, or not yet delivered, are ignored. Returns how many items changed.
+   */
+  applyOfficeDecisions(decisions: OfficeDecision[]): Promise<number>;
 }
 
 export type NewRegistration = Omit<RegistrationItem, 'status' | 'attempts' | 'lastError' | 'serverId'>;
