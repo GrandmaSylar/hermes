@@ -1,7 +1,7 @@
 import bcrypt from 'bcryptjs';
 import { describe, expect, test } from 'vitest';
 import { buildApp } from '../src/app';
-import { buildSchema, describe as describeSchema, product, SchemaError, type ColumnRow } from '../src/schema';
+import { buildSchema, describe as describeSchema, nameExpr, product, SchemaError, type ColumnRow } from '../src/schema';
 import { MemoryRepo } from './memory-repo';
 
 const table = (t: string, cols: string[]): ColumnRow[] => cols.map((column) => ({ table: t, column }));
@@ -122,5 +122,21 @@ describe('when the database has no share tables', () => {
     expect(res.json().reason).toMatch(/not available on this system/);
     const health = (await app.inject({ method: 'GET', url: '/health' })).json();
     expect(health.schema.sharesEnabled).toBe(false);
+  });
+});
+
+describe('member display name', () => {
+  test('falls back to first, middle and last name when FullName is empty', () => {
+    const { schema } = buildSchema([...rows(), ...table('Customer', ['MiddleName', 'LastName'])]);
+    const sql = nameExpr(schema);
+    expect(sql).toContain('c.FullName');
+    expect(sql).toContain('c.FirstName');
+    expect(sql).toContain('c.MiddleName');
+    expect(sql).toContain('c.LastName');
+  });
+
+  test('uses FullName alone when the name parts do not exist', () => {
+    const { schema } = buildSchema(rows().filter((r) => !(r.table === 'Customer' && r.column === 'FirstName')));
+    expect(nameExpr(schema)).toBe('c.FullName');
   });
 });

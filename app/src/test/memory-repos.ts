@@ -10,6 +10,7 @@ import type {
 } from '@/data/repositories';
 import type { UnsyncedTotals } from '@/domain/capture';
 import type { RegistrationItem } from '@/domain/registration';
+import { memberMatches, memberRank, queryWords } from '@/domain/member-search';
 import { toMinor } from '@/domain/money';
 import type { Member, OutboxItem, OutboxStatus } from '@/domain/types';
 
@@ -32,9 +33,11 @@ class MemoryMembers implements MemberRepo {
     }
   }
   async search(query: string, limit: number) {
-    const q = query.trim().toLowerCase();
+    const words = queryWords(query);
+    const numbers = (m: Member) => [...m.accounts.savings, ...m.accounts.shares].map((a) => a.number);
     return [...this.rows.values()]
-      .filter((m) => q === '' || `${m.memberCode} ${m.name} ${m.phone}`.toLowerCase().includes(q))
+      .filter((m) => memberMatches(words, m, numbers(m)))
+      .sort((a, b) => memberRank(words, a) - memberRank(words, b) || Number(b.myCustomer) - Number(a.myCustomer) || a.name.localeCompare(b.name))
       .slice(0, limit);
   }
   async get(code: string) {
@@ -42,6 +45,10 @@ class MemoryMembers implements MemberRepo {
   }
   async count() {
     return this.rows.size;
+  }
+  async maxCode() {
+    const codes = [...this.rows.keys()];
+    return codes.length === 0 ? null : codes.reduce((a, b) => (Number(b) > Number(a) ? b : a));
   }
   async applySavingsAccounts(accounts: SavingsAccountInfo[]) {
     for (const a of accounts) {

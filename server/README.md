@@ -91,6 +91,30 @@ Checks against a real (dummy) database are skipped unless `HERMES_INTEGRATION=1`
 
 Port 80 and 443 are then taken, so skip Caddy. Use `deploy/docker-compose.behind-nginx.yml`, which publishes the server on `127.0.0.1:3000` only, and `deploy/nginx-field.conf` as a new server block for your name. Then `certbot --nginx -d <your name>` adds the certificate to that block. Leave existing sites alone. If the database container is on Docker's default bridge, create a network, attach the container to it (`docker network connect`, no restart needed) and set `DB_NETWORK` to that network; the server then reaches it by container name.
 
+### Without Docker (pm2)
+
+The server is a plain Node app, so it can run under pm2 instead of a container (used on the test VPS). Needs Node 22 and pm2.
+
+1. Copy the `server` folder to the VPS (for example `/opt/hermes-field`) with its `.env`, then `npm ci && npm run build && npm prune --omit=dev`.
+2. Add `ecosystem.config.cjs` next to `package.json`. The server must bind to `127.0.0.1` so only Nginx can reach it, and it reaches a containerised database through the port the container publishes, not the container name:
+
+   ```js
+   module.exports = {
+     apps: [{
+       name: 'hermes-field',
+       script: 'dist/main.js',
+       cwd: '/opt/hermes-field',
+       node_args: '--env-file=/opt/hermes-field/.env',
+       env: { NODE_ENV: 'production', HOST: '127.0.0.1', PORT: '3000', DB_SERVER: '127.0.0.1', DB_PORT: '1436' },
+       max_memory_restart: '300M',
+     }],
+   };
+   ```
+
+   Values in `env` win over the same names in `.env`. Set `DB_SERVER` and `DB_PORT` to wherever your database is reachable from the host.
+3. `pm2 start ecosystem.config.cjs`, then `pm2 startup systemd` and `pm2 save` so it comes back after a reboot.
+4. To update: copy the changed files, then `npm ci && npm run build && pm2 restart hermes-field`.
+
 Check after deploying: `GET /health` returns `{"status":"ok"}` and a sign-in works.
 
 Point the app at `https://<domain>` with `EXPO_PUBLIC_API_URL`.

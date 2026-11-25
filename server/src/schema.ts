@@ -133,3 +133,14 @@ export function product(s: Schema, kind: Kind, a: string) {
 export function pick(s: Schema, table: string, alias: string, column: string, fallback: string): string {
   return has(s, `${table}.${column}`) ? `${alias}.${column}` : fallback;
 }
+
+/**
+ * SQL for a customer's display name. Members registered in the office app can have FullName left
+ * empty while first and last name are filled in, so fall back to those.
+ */
+export function nameExpr(s: Schema, alias = 'c'): string {
+  const parts = ['FirstName', 'MiddleName', 'LastName'].filter((c) => has(s, `Customer.${c}`)).map((c) => `${alias}.${c}`);
+  if (parts.length === 0) return `${alias}.FullName`;
+  const joined = `LTRIM(RTRIM(CONCAT_WS(' ', ${parts.map((p) => `NULLIF(LTRIM(RTRIM(${p})), '')`).join(', ')})))`;
+  return `COALESCE(NULLIF(LTRIM(RTRIM(${alias}.FullName)), ''), ${joined})`;
+}
