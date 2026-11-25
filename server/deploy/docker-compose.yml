@@ -1,0 +1,31 @@
+# Runs the field server and an HTTPS proxy on the same VPS as the database container.
+# Set DOMAIN (a name that points at the VPS) and DB_NETWORK (the Docker network the
+# SQL Server container is on; see `docker network ls`). Then: docker compose up -d --build
+services:
+  field-server:
+    build: ..
+    env_file: ../.env
+    restart: unless-stopped
+    networks: [default, db]
+    # No published ports: only the proxy can reach it.
+
+  caddy:
+    image: caddy:2
+    restart: unless-stopped
+    environment:
+      DOMAIN: ${DOMAIN:?set DOMAIN to the public name of this server}
+    ports:
+      - "80:80"
+      - "443:443"
+    volumes:
+      - ./Caddyfile:/etc/caddy/Caddyfile:ro
+      - caddy_data:/data
+    depends_on: [field-server]
+
+networks:
+  db:
+    external: true
+    name: ${DB_NETWORK:?set DB_NETWORK to the SQL Server container's network}
+
+volumes:
+  caddy_data:
