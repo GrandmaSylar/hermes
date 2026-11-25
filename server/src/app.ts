@@ -4,14 +4,23 @@ import rateLimit from '@fastify/rate-limit';
 import bcrypt from 'bcryptjs';
 import { z } from 'zod';
 import type { Config } from './config';
-import { isAmountText, toMinor } from './money';
-import type { Officer, Repo } from './repo';
+import { fromMinor, isAmountText, toMinor } from './money';
+import { MAX_LOCAL_ID, storedReference } from './reference';
+import type { AccountInfo, DepositKind, Officer, Repo } from './repo';
+import type { PendingSmsNotifier } from './sms';
 import { Tokens } from './tokens';
 
 export interface AppDeps {
   config: Config;
   repo: Repo;
   now?: () => Date;
+  /** Sends the "received, pending approval" text after a deposit is stored. Omit for none. */
+  notifier?: PendingSmsNotifier;
+}
+
+/** Savings rows keep their plain id; share rows are marked so the two id spaces never clash. */
+export function serverIdOf(kind: DepositKind, id: number): string {
+  return kind === 'SHARES' ? `SH${id}` : String(id);
 }
 
 declare module 'fastify' {
@@ -33,12 +42,36 @@ const loginBody = z.object({
 const refreshBody = z.object({ refreshToken: z.string().min(10).max(4000) });
 
 const depositBody = z.object({
-  localTransactionId: z.string().regex(/^[A-Za-z0-9_-]{8,46}$/, 'localTransactionId must be 8 to 46 letters, digits, - or _'),
+  localTransactionId: z
+    .string()
+    .regex(new RegExp(`^[A-Za-z0-9_-]{8,${MAX_LOCAL_ID}}$`), `localTransactionId must be 8 to ${MAX_LOCAL_ID} letters, digits, - or _`),
+  kind: z.enum(['SAVINGS', 'SHARES']).default('SAVINGS'),
   memberCode: z.string().regex(/^\d{1,10}$/),
   accountId: z.number().int().positive(),
   amount: z.string().refine(isAmountText, 'amount must have at most two decimals'),
   collectedAt: z.string().datetime({ offset: true }),
+  paymentMode: z.string().trim().min(1).max(40).default('CASH'),
 });
+
+const NOUN: Record<DepositKind, string> = { SAVINGS: 'savings account', SHARES: 'share account' };
+
+/** Why a deposit cannot go into this account, in plain English, or null when it can. */
+function ineligible(kind: DepositKind, account: AccountInfo, minor: bigint, memberCode: string, branchCode: string): string | null {
+  const noun = NOUN[kind];
+  if (account.customerCode !== memberCode) return `That ${noun} does not belong to this member.`;
+  if (account.branchCode !== branchCode) return 'This member is not in your branch.';
+  if (account.accountStatus.toUpperCase() !== 'ACTIVE') return `The ${noun} is not active.`;
+  if (account.isClosed) return `The ${noun} is closed.`;
+  if (kind === 'SAVINGS' && account.isDormant) return 'The savings account is dormant. Take it to the office.';
+  if (account.productActive === false) return `The ${noun}'s product is no longer offered.`;
+  if (mapMemberStatus(account.customerStatusCode, account.customerActive) !== 'ACTIVE') return 'This member is not active.';
+  const word = kind === 'SAVINGS' ? 'deposit' : 'purchase';
+  const min = account.minAmount && toMinor(account.minAmount) > 0n ? toMinor(account.minAmount) : null;
+  const max = account.maxAmount && toMinor(account.maxAmount) > 0n ? toMinor(account.maxAmount) : null;
+  if (min !== null && minor < min) return `The minimum ${word} for this ${noun} is GHS ${account.minAmount}.`;
+  if (max !== null && minor > max) return `The maximum ${word} for this ${noun} is GHS ${account.maxAmount}.`;
+  return null;
+}
 
 const membersQuery = z.object({
   cursor: z.string().regex(/^\d{1,10}$/).optional(),
@@ -101,7 +134,8 @@ export function buildApp(deps: AppDeps): FastifyInstance {
   app.get('/health', async (_req, reply) => {
     try {
       await (repo as { ping?: () => Promise<void> }).ping?.();
-      return { status: 'ok' };
+      const schema = repo.describeSchema?.();
+      return schema ? { status: 'ok', schema } : { status: 'ok' };
     } catch {
       return fail(reply, 503, 'Database unavailable');
     }
@@ -185,6 +219,7 @@ export function buildApp(deps: AppDeps): FastifyInstance {
         status: mapMemberStatus(m.statusCode, m.isActive),
         savingsAccountId: m.savingsAccountId,
         savingsBalance: m.savingsBalance,
+        accounts: m.accounts,
       })),
       nextCursor: rows.length === limit ? rows[rows.length - 1].code : null,
     };
@@ -199,6 +234,9 @@ export function buildApp(deps: AppDeps): FastifyInstance {
     const body = parsed.data;
     const reject = (reason: string) => reply.code(422).send({ status: 'REJECTED', localTransactionId: body.localTransactionId, reason });
 
+    // Mobile money would be posted as banker cash by the core's approval, so it is refused outright.
+    if (body.paymentMode.toUpperCase() !== 'CASH') return reject('Mobile money deposits are not available yet.');
+
     const minor = toMinor(body.amount);
     if (minor <= 0n) return reject('The amount must be greater than zero.');
     if (minor > toMinor(config.limits.maxSingleAmount)) {
@@ -212,33 +250,54 @@ export function buildApp(deps: AppDeps): FastifyInstance {
       return reject(`This collection is more than ${config.maxBackdateDays} days old. Take it to the office.`);
     }
 
-    const account = await repo.getAccount(body.accountId);
-    if (!account || account.customerCode !== body.memberCode) return reject('That savings account does not belong to this member.');
-    if (account.branchCode !== officer.branchCode) return reject('This member is not in your branch.');
-    if (account.accountStatus.toUpperCase() !== 'ACTIVE') return reject('The savings account is not active.');
-    if (mapMemberStatus(account.customerStatusCode, account.customerActive) !== 'ACTIVE') {
-      return reject('This member is not active.');
+    const kind = body.kind;
+    if (kind === 'SHARES' && repo.describeSchema && !repo.describeSchema().sharesEnabled) {
+      return reject('Share deposits are not available on this system.');
     }
+    const account = await repo.getAccount(kind, body.accountId);
+    if (!account) return reject(`That ${NOUN[kind]} does not belong to this member.`);
+    const why = ineligible(kind, account, minor, body.memberCode, officer.branchCode);
+    if (why) return reject(why);
 
     const outcome = await repo.insertDeposit({
       officer,
+      kind,
       reference: body.localTransactionId,
       customerCode: body.memberCode,
-      savingsAccountId: body.accountId,
+      accountId: body.accountId,
       amount: body.amount,
       collectedAt,
       branchCode: account.branchCode,
+      productCode: account.productCode ?? (kind === 'SAVINGS' ? 'MS' : ''),
     });
 
     if (outcome.kind === 'CREATED') {
-      return reply.code(201).send({ status: 'ACCEPTED', localTransactionId: body.localTransactionId, serverId: String(outcome.id) });
+      reply.code(201).send({
+        status: 'ACCEPTED',
+        localTransactionId: body.localTransactionId,
+        serverId: serverIdOf(kind, outcome.id),
+      });
+      // After the row is committed and the answer is on its way: a text can never fail or delay a deposit.
+      deps.notifier?.schedule({
+        localTransactionId: body.localTransactionId,
+        storedReference: storedReference(body.localTransactionId),
+        customerCode: body.memberCode,
+        branchCode: account.branchCode,
+        officerId: officer.id,
+        amount: fromMinor(minor),
+        productName: account.productName ?? (kind === 'SAVINGS' ? 'savings' : 'shares'),
+      });
+      return reply;
     }
     const same =
+      outcome.depositKind === kind &&
       outcome.customerCode === body.memberCode &&
-      outcome.savingsAccountId === body.accountId &&
+      outcome.accountId === body.accountId &&
       toMinor(outcome.amount) === minor;
     if (same) {
-      return reply.code(200).send({ status: 'DUPLICATE', localTransactionId: body.localTransactionId, serverId: String(outcome.id) });
+      return reply
+        .code(200)
+        .send({ status: 'DUPLICATE', localTransactionId: body.localTransactionId, serverId: serverIdOf(outcome.depositKind, outcome.id) });
     }
     return reply.code(409).send({
       status: 'CONFLICT',
@@ -253,7 +312,8 @@ export function buildApp(deps: AppDeps): FastifyInstance {
     const rows = await repo.listDeposits(req.officer!.id, parsed.data.since ? new Date(parsed.data.since) : null, parsed.data.limit);
     return {
       items: rows.map((r) => ({
-        serverId: String(r.id),
+        serverId: serverIdOf(r.kind, r.id),
+        kind: r.kind,
         localTransactionId: r.reference,
         memberCode: r.customerCode,
         amount: r.amount,
