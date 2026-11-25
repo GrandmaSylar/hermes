@@ -179,6 +179,50 @@ describe('member accounts', () => {
     expect((await repos.members.frequent(10))[0].accounts.savings).toHaveLength(1);
   });
 
+  describe('search', () => {
+    const seed = async () => {
+      const { repos } = await setup();
+      await repos.members.upsertMany([
+        serverMember('2001', { savings: [acct(1, '2001-KS', 'Ordinary Savings', '1.00')], shares: [] }, { name: 'Kofi Adu Mensah', phone: '024 412 3456' }),
+        serverMember('2002', { savings: [acct(2, 'ACC-777', 'Ordinary Savings', '1.00')], shares: [] }, { name: 'Ama Mensah', phone: '+233201112222' }),
+        serverMember('3001', { savings: [], shares: [] }, { name: 'Mensah Yaw', phone: '0553334444' }),
+        serverMember('2', { savings: [], shares: [] }, { name: 'Esi 50%_off', phone: '0500000000' }),
+      ]);
+      return repos;
+    };
+
+    test('every word must match, in any order', async () => {
+      const repos = await seed();
+      expect((await repos.members.search('mensah kofi', 10)).map((m) => m.memberCode)).toEqual(['2001']);
+      expect((await repos.members.search('kofi zzz', 10))).toEqual([]);
+    });
+
+    test('a phone number matches however it is typed or stored', async () => {
+      const repos = await seed();
+      for (const q of ['0244123456', '024 412 3456', '+233244123456', '244123456', '4123']) {
+        expect((await repos.members.search(q, 10)).map((m) => m.memberCode)).toEqual(['2001']);
+      }
+      expect((await repos.members.search('0201112222', 10)).map((m) => m.memberCode)).toEqual(['2002']);
+    });
+
+    test('an account number finds its member', async () => {
+      const repos = await seed();
+      expect((await repos.members.search('acc-777', 10)).map((m) => m.memberCode)).toEqual(['2002']);
+    });
+
+    test('best matches come first: exact code, then name start, then name word, then the rest', async () => {
+      const repos = await seed();
+      expect((await repos.members.search('2', 10))[0].memberCode).toBe('2');
+      expect((await repos.members.search('mensah', 10)).map((m) => m.memberCode)).toEqual(['3001', '2002', '2001']);
+    });
+
+    test('percent and underscore are plain characters', async () => {
+      const repos = await seed();
+      expect((await repos.members.search('50%_', 10)).map((m) => m.memberCode)).toEqual(['2']);
+      expect(await repos.members.search('%', 10)).toHaveLength(1);
+    });
+  });
+
   test('a list longer than one chunk still gets every member\'s accounts', async () => {
     const { repos } = await setup();
     const many = Array.from({ length: 450 }, (_, i) => serverMember(String(10000 + i), { savings: [acct(i + 1, `${i}-KS`, 'Ordinary Savings', '1.00')], shares: [] }));

@@ -33,6 +33,53 @@ describe('sync engine', () => {
     expect(again.pulledMembers).toBe(0);
   });
 
+  test('members added since the last pull arrive on the next sync, without re-downloading everyone', async () => {
+    const { api, session, repos } = await setup({ memberCount: 50 });
+    const known = await repos.members.count();
+    const maxCode = String(Math.max(...(await repos.members.search('', 500)).map((m) => Number(m.memberCode))));
+    const template = (await repos.members.search('', 1))[0];
+    const calls: (string | null)[] = [];
+    // The real server pages by "after this member code"; stand in for it with one new member.
+    api.pullMembers = async (_s, cursor) => {
+      calls.push(cursor);
+      const fresh = cursor !== null && Number(cursor) >= Number(maxCode) ? [{ ...template, memberCode: String(Number(maxCode) + 1), name: 'Brand New' }] : [];
+      return { items: fresh, nextCursor: null };
+    };
+    const report = await syncOnce({ repos, api, session });
+    expect(calls).toEqual([maxCode]);
+    expect(report.pulledMembers).toBe(1);
+    expect(await repos.members.count()).toBe(known + 1);
+    expect((await repos.members.search('brand new', 5))[0].memberCode).toBe(String(Number(maxCode) + 1));
+    // Next time it asks after the newest one.
+    calls.length = 0;
+    await syncOnce({ repos, api, session });
+    expect(calls).toEqual([String(Number(maxCode) + 1)]);
+  });
+
+  test('a phone downloaded before the highest code was tracked still catches up', async () => {
+    const { api, session, repos } = await setup({ memberCount: 30 });
+    // Simulate an older install: members and a fresh pull time, but no stored highest code.
+    repos.kv.rows.delete('members.maxCode');
+    const maxCode = String(Math.max(...(await repos.members.search('', 500)).map((m) => Number(m.memberCode))));
+    const template = (await repos.members.search('', 1))[0];
+    const calls: (string | null)[] = [];
+    api.pullMembers = async (_s, cursor) => {
+      calls.push(cursor);
+      return { items: cursor === maxCode ? [{ ...template, memberCode: String(Number(maxCode) + 1), name: 'Late Arrival' }] : [], nextCursor: null };
+    };
+    const report = await syncOnce({ repos, api, session });
+    expect(calls).toEqual([maxCode]);
+    expect(report.pulledMembers).toBe(1);
+  });
+
+  test('a failed new-member check does not fail the sync', async () => {
+    const { api, session, repos } = await setup({ memberCount: 20 });
+    api.pullMembers = async () => {
+      throw new ApiError('NETWORK', 'down');
+    };
+    await expect(syncOnce({ repos, api, session })).resolves.toMatchObject({ pulledMembers: 0 });
+  });
+
   test('a captured collection is delivered once and marked as pending approval', async () => {
     const { api, session, repos } = await setup();
     const member = await activeMember(repos);

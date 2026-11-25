@@ -39,6 +39,8 @@ export interface SyncDeps {
 const DAY_MS = 24 * 60 * 60 * 1000;
 const KV_CURSOR = 'members.cursor';
 const KV_PULLED_AT = 'members.pulledAt';
+/** Highest member code pulled so far; members are listed in code order, so newer ones follow it. */
+const KV_MAX_CODE = 'members.maxCode';
 /** The core system's member list has no savings accounts, so they are pulled in a second stage. */
 const KV_STAGE = 'pull.stage';
 const KV_ACCOUNTS_CURSOR = 'accounts.cursor';
@@ -248,7 +250,11 @@ async function pullMembersIfStale(deps: SyncDeps, report: SyncReport): Promise<v
   let stage = (await repos.kv.get(KV_STAGE)) || 'members';
   let cursor = (await repos.kv.get(KV_CURSOR)) || null;
   const fresh = pulledAt !== null && now.getTime() - new Date(pulledAt).getTime() < maxAge;
-  if (fresh && stage === 'members' && cursor === null) return;
+  if (fresh && stage === 'members' && cursor === null) {
+    // Cached data is trusted, but members added since are cheap to fetch: only the ones after the last known code.
+    await pullNewMembers(deps, report);
+    return;
+  }
 
   // Stage 1: members. Progress is remembered so an interrupted pull resumes instead of restarting.
   if (stage === 'members') {
@@ -256,6 +262,7 @@ async function pullMembersIfStale(deps: SyncDeps, report: SyncReport): Promise<v
       const page = await api.pullMembers(session, cursor);
       await repos.members.upsertMany(page.items);
       report.pulledMembers += page.items.length;
+      await rememberMaxCode(repos, page.items);
       cursor = page.nextCursor;
       await repos.kv.set(KV_CURSOR, cursor ?? '');
       if (cursor === null) break;
@@ -277,4 +284,31 @@ async function pullMembersIfStale(deps: SyncDeps, report: SyncReport): Promise<v
   }
   await repos.kv.set(KV_STAGE, 'members');
   await repos.kv.set(KV_PULLED_AT, now.toISOString());
+}
+
+async function rememberMaxCode(repos: Repos, items: { memberCode: string }[]): Promise<void> {
+  if (items.length === 0) return;
+  const last = items[items.length - 1].memberCode;
+  const known = await repos.kv.get(KV_MAX_CODE);
+  if (!known || Number(last) > Number(known)) await repos.kv.set(KV_MAX_CODE, last);
+}
+
+/** Fetches only members newer than the highest code already on the phone. A failure here never blocks the sync. */
+async function pullNewMembers(deps: SyncDeps, report: SyncReport): Promise<void> {
+  const { repos, api, session } = deps;
+  // A phone that downloaded its list before this was tracked has no stored value: use the highest code it holds.
+  let cursor = (await repos.kv.get(KV_MAX_CODE)) || (await repos.members.maxCode());
+  if (cursor === null) return;
+  try {
+    for (;;) {
+      const page = await api.pullMembers(session, cursor);
+      await repos.members.upsertMany(page.items);
+      report.pulledMembers += page.items.length;
+      await rememberMaxCode(repos, page.items);
+      cursor = page.nextCursor;
+      if (cursor === null) break;
+    }
+  } catch {
+    // Offline or a server hiccup: the cached list is still good, and the next sync tries again.
+  }
 }

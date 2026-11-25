@@ -11,6 +11,7 @@ import type {
 } from '@/data/repositories';
 import type { UnsyncedTotals } from '@/domain/capture';
 import type { RegistrationItem } from '@/domain/registration';
+import { queryWords } from '@/domain/member-search';
 import { toMinor } from '@/domain/money';
 import type { AccountOption, Member, MemberAccounts, OfficeStatus, OutboxItem, OutboxStatus, PaymentMode, ProductType } from '@/domain/types';
 
@@ -197,23 +198,40 @@ class SqliteMemberRepo implements MemberRepo {
   }
 
   async search(query: string, limit: number): Promise<Member[]> {
-    const q = query.trim().toLowerCase();
-    if (q === '') {
+    const words = queryWords(query);
+    if (words.length === 0) {
       const rows = await this.db.getAllAsync<MemberRow>(
         'SELECT * FROM members ORDER BY name LIMIT ?',
         limit,
       );
       return this.withAccounts(rows);
     }
-    const escaped = likeEscape(q);
+    // Every word must match the member's code, name, phone (formatting ignored) or an account number.
+    const hay = `lower(member_code || ' ' || name || ' ' || replace(replace(replace(replace(replace(phone, ' ', ''), '-', ''), '+', ''), '(', ''), ')', ''))`;
+    const perWord = `(${hay} LIKE ? ESCAPE '\\' OR member_code IN (SELECT member_code FROM member_accounts WHERE lower(number) LIKE ? ESCAPE '\\'))`;
+    const first = likeEscape(words[0]);
+    const params: (string | number)[] = [];
+    for (const w of words) {
+      const like = `%${likeEscape(w)}%`;
+      params.push(like, like);
+    }
+    // Best matches first: exact code, code prefix, name prefix, a name word prefix; then mine; then A-Z.
     const rows = await this.db.getAllAsync<MemberRow>(
       `SELECT * FROM members
-       WHERE search_text LIKE ? ESCAPE '\\'
-       ORDER BY (member_code LIKE ? ESCAPE '\\' OR lower(name) LIKE ? ESCAPE '\\') DESC, name
+       WHERE ${words.map(() => perWord).join(' AND ')}
+       ORDER BY CASE
+           WHEN lower(member_code) = ? THEN 0
+           WHEN lower(member_code) LIKE ? ESCAPE '\\' THEN 1
+           WHEN lower(name) LIKE ? ESCAPE '\\' THEN 2
+           WHEN lower(name) LIKE ? ESCAPE '\\' THEN 3
+           ELSE 4 END,
+         my_customer DESC, name
        LIMIT ?`,
-      `%${escaped}%`,
-      `${escaped}%`,
-      `${escaped}%`,
+      ...params,
+      words[0],
+      `${first}%`,
+      `${first}%`,
+      `% ${first}%`,
       limit,
     );
     return this.withAccounts(rows);
@@ -226,6 +244,10 @@ class SqliteMemberRepo implements MemberRepo {
     return member;
   }
 
+  async maxCode(): Promise<string | null> {
+    const row = await this.db.getFirstAsync<{ c: string }>('SELECT member_code AS c FROM members ORDER BY CAST(member_code AS INTEGER) DESC LIMIT 1');
+    return row?.c ?? null;
+  }
   async count(): Promise<number> {
     const row = await this.db.getFirstAsync<{ n: number }>('SELECT count(*) AS n FROM members');
     return row?.n ?? 0;

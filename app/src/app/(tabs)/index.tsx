@@ -118,10 +118,12 @@ export default function MembersTab() {
             <TextInput
               value={query}
               onChangeText={setQuery}
-              placeholder="Search name, member number or phone"
+              placeholder="Name, member no., phone or account no."
               placeholderTextColor={colors.muted}
               autoCorrect={false}
               autoCapitalize="none"
+              returnKeyType="search"
+              clearButtonMode="while-editing"
               style={{
                 minHeight: 48,
                 borderWidth: 1,

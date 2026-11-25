@@ -14,6 +14,8 @@ export interface MemberRepo {
   search(query: string, limit: number): Promise<Member[]>;
   get(memberCode: string): Promise<Member | null>;
   count(): Promise<number>;
+  /** The highest member code on the phone, or null when there are no members. */
+  maxCode(): Promise<string | null>;
   /** Records each member's savings account id and balance. Members not on the phone are ignored. */
   applySavingsAccounts(accounts: SavingsAccountInfo[]): Promise<void>;
   setMyCustomer(memberCode: string, value: boolean): Promise<void>;
