@@ -55,3 +55,40 @@ Development mock sign-in: staff ID `FO001`, password `Passw0rd!`, OTP `123456`. 
 In a development build, the Sync tab has a "Simulate no network" switch for testing offline capture and automatic sync.
 
 To try the app in Expo Go anyway (unencrypted, development only), start it with `EXPO_PUBLIC_ALLOW_UNENCRYPTED_DB=true`. This is ignored in release builds.
+
+## Running in Expo Go
+
+Expo Go lets you try the app on your own phone without building anything. It needs Expo Go for SDK 58 from the phone's app store.
+
+One time, in the `app` folder:
+
+```
+copy .env.example .env.local        # PowerShell: Copy-Item .env.example .env.local
+npm install
+```
+
+`.env.local` is ignored by git. It holds `EXPO_PUBLIC_API_URL` (the field server; leave it out to run on demo data) and `EXPO_PUBLIC_ALLOW_UNENCRYPTED_DB=true` (Expo Go has no encrypted database, so the app refuses to start without this; development only, test data only). Expo reads only this folder's env files, and only variables that start with `EXPO_PUBLIC_`.
+
+Every time:
+
+```
+cd app
+npm start
+```
+
+Wait for the QR code, then scan it from inside Expo Go. The phone and the computer must be on the **same Wi-Fi**. If they cannot be, use `npm run start:tunnel`. Press `r` in the terminal to reload the app.
+
+Sign in as a banker from the core system's field officer list (staff ID and PIN). With no `EXPO_PUBLIC_API_URL`, the sign-in screen says "Demo mode" and the mock staff ID `FO001` works.
+
+| What you see | What it usually means | What to do |
+| :--- | :--- | :--- |
+| "Secure storage is not available" at start-up | `EXPO_PUBLIC_ALLOW_UNENCRYPTED_DB` is not `true` | Put it in `app/.env.local`, then `npm run start:clear` |
+| "Demo mode" on the sign-in screen | `EXPO_PUBLIC_API_URL` is empty or not read | Check `app/.env.local` (not the repo root), then `npm run start:clear` |
+| Changed `.env.local` but nothing changed | Expo caches the values | `npm run start:clear` |
+| Phone cannot connect to the QR code | Different Wi-Fi, or the firewall blocks Node | Same Wi-Fi, allow Node on private networks, or `npm run start:tunnel` |
+| "No connection to the server" after sign-in | The server is down or the address is wrong | Open the address plus `/health` in the phone's browser; it should say `{"status":"ok"}` |
+| Expo Go says the project is incompatible | Expo Go is older than SDK 58 | Update Expo Go |
+| Everything looks stuck after changing code | Cached files | `npm run start:clear` |
+
+A release build refuses to build if `EXPO_PUBLIC_API_URL` is set and is not `https://`, because staff PINs travel in those requests.
+
