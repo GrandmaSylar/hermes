@@ -1,6 +1,6 @@
 import { router } from 'expo-router';
 import { useEffect, useRef, useState } from 'react';
-import { FlatList, Pressable, Text, TextInput, View } from 'react-native';
+import { ActivityIndicator, FlatList, Pressable, RefreshControl, Text, TextInput, View } from 'react-native';
 import { computeDayMetrics, type DayMetrics } from '@/domain/metrics';
 import { formatAmount } from '@/domain/money';
 import type { Member } from '@/domain/types';
@@ -48,7 +48,8 @@ function MemberRow({ member }: { member: Member }) {
 }
 
 export default function MembersTab() {
-  const { repos, version, session, capabilities } = useApp();
+  const { repos, version, session, capabilities, syncing, syncNow } = useApp();
+  const [note, setNote] = useState('');
   const [query, setQuery] = useState('');
   const [debounced, setDebounced] = useState('');
   const [results, setResults] = useState<Member[]>([]);
@@ -88,9 +89,18 @@ export default function MembersTab() {
     })();
   }, [repos, debounced, version]);
 
+  // Pull down or tap the round button: sends waiting items, then re-downloads every member and balance.
+  const refresh = async () => {
+    if (syncing) return;
+    setNote('');
+    const report = await syncNow({ full: true });
+    if (report?.offline) setNote('No connection. Showing what is on this phone.');
+  };
+
   return (
     <View style={{ flex: 1 }}>
       <FlatList
+        refreshControl={<RefreshControl refreshing={syncing} onRefresh={refresh} />}
         data={results}
         keyExtractor={(m) => m.memberCode}
         renderItem={({ item }) => <MemberRow member={item} />}
@@ -135,6 +145,7 @@ export default function MembersTab() {
                 color: colors.text,
               }}
             />
+            {note ? <Text style={{ color: colors.warn, fontSize: 13 }}>{note}</Text> : null}
             <Text style={{ color: colors.muted, fontSize: 12 }}>
               {debounced.trim() === ''
                 ? `My customers and frequent members · ${total.toLocaleString()} members on this phone`
@@ -152,6 +163,35 @@ export default function MembersTab() {
           </Text>
         }
       />
+      <Pressable
+        accessibilityRole="button"
+        accessibilityLabel="Refresh"
+        onPress={refresh}
+        disabled={syncing}
+        style={({ pressed }) => ({
+          position: 'absolute',
+          right: 20,
+          bottom: 24,
+          width: 56,
+          height: 56,
+          borderRadius: 28,
+          alignItems: 'center',
+          justifyContent: 'center',
+          backgroundColor: colors.primary,
+          opacity: pressed || syncing ? 0.85 : 1,
+          elevation: 6,
+          shadowColor: '#000',
+          shadowOpacity: 0.25,
+          shadowRadius: 6,
+          shadowOffset: { width: 0, height: 3 },
+        })}
+      >
+        {syncing ? (
+          <ActivityIndicator color={colors.primaryText} />
+        ) : (
+          <Text style={{ color: colors.primaryText, fontSize: 26, lineHeight: 30 }}>↻</Text>
+        )}
+      </Pressable>
     </View>
   );
 }

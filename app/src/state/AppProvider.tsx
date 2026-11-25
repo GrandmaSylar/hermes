@@ -30,7 +30,8 @@ interface AppContextValue {
   /** Development only: pretend the network is down. */
   simulateOffline: boolean;
   setSimulateOffline: (value: boolean) => void;
-  syncNow: () => Promise<SyncReport | null>;
+  /** Sends waiting items and fetches new members. `full` re-downloads every member and balance. */
+  syncNow: (options?: { full?: boolean }) => Promise<SyncReport | null>;
   /** The server's answer to a password: null when signed in, or the id of an SMS code challenge. */
   signInPassword: (staffId: string, password: string) => Promise<string | null>;
   capabilities: ApiCapabilities;
@@ -113,11 +114,11 @@ export function AppProvider({ children }: { children: ReactNode }) {
     };
   }, []);
 
-  const syncNow = useCallback(async (): Promise<SyncReport | null> => {
+  const syncNow = useCallback(async (options?: { full?: boolean }): Promise<SyncReport | null> => {
     if (!repos || !session) return null;
     setSyncing(true);
     try {
-      const report = await syncOnce({ repos, api, session });
+      const report = await syncOnce({ repos, api, session, fullRefresh: options?.full });
       setLastReport(report);
       if (!report.offline) setLastSyncAt(new Date().toISOString());
       if (report.authError) setStatus('signedOut');

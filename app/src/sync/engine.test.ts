@@ -72,6 +72,20 @@ describe('sync engine', () => {
     expect(report.pulledMembers).toBe(1);
   });
 
+  test('a full refresh re-downloads every member even while the cache is fresh', async () => {
+    const { api, session, repos } = await setup({ memberCount: 450 });
+    const normal = await syncOnce({ repos, api, session });
+    expect(normal.pulledMembers).toBe(0);
+    const full = await syncOnce({ repos, api, session, fullRefresh: true });
+    expect(full.pulledMembers).toBe(450);
+    expect(await repos.members.count()).toBe(450);
+    // It also restarts a download that was left half done.
+    await repos.kv.set('members.cursor', '200');
+    await repos.kv.set('pull.stage', 'members');
+    const again = await syncOnce({ repos, api, session, fullRefresh: true });
+    expect(again.pulledMembers).toBe(450);
+  });
+
   test('a failed new-member check does not fail the sync', async () => {
     const { api, session, repos } = await setup({ memberCount: 20 });
     api.pullMembers = async () => {

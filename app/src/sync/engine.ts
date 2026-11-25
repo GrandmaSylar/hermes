@@ -34,6 +34,8 @@ export interface SyncDeps {
   /** How long cached member data is trusted before a refresh. */
   memberMaxAgeMs?: number;
   batchSize?: number;
+  /** Re-download every member and balance now, ignoring how recent the cached copy is. */
+  fullRefresh?: boolean;
 }
 
 const DAY_MS = 24 * 60 * 60 * 1000;
@@ -249,7 +251,13 @@ async function pullMembersIfStale(deps: SyncDeps, report: SyncReport): Promise<v
   const pulledAt = await repos.kv.get(KV_PULLED_AT);
   let stage = (await repos.kv.get(KV_STAGE)) || 'members';
   let cursor = (await repos.kv.get(KV_CURSOR)) || null;
-  const fresh = pulledAt !== null && now.getTime() - new Date(pulledAt).getTime() < maxAge;
+  if (deps.fullRefresh) {
+    // Start over from the first member, even if an earlier download was half done.
+    stage = 'members';
+    cursor = null;
+    await repos.kv.set(KV_CURSOR, '');
+  }
+  const fresh = !deps.fullRefresh && pulledAt !== null && now.getTime() - new Date(pulledAt).getTime() < maxAge;
   if (fresh && stage === 'members' && cursor === null) {
     // Cached data is trusted, but members added since are cheap to fetch: only the ones after the last known code.
     await pullNewMembers(deps, report);
