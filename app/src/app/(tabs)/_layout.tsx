@@ -1,10 +1,11 @@
-import { Redirect, Tabs } from 'expo-router';
+import { Tabs } from 'expo-router';
 import { useApp } from '@/state/AppProvider';
 import { colors } from '@/ui/theme';
 
 export default function TabsLayout() {
   const { status } = useApp();
-  if (status !== 'ready') return <Redirect href="/" />;
+  // The root layout only mounts these screens once signed in; this is just a safety net.
+  if (status !== 'ready') return null;
 
   return (
     <Tabs
