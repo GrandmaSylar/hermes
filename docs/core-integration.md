@@ -25,6 +25,7 @@ The client is `app/src/data/api/http.ts`. All routes are on the field server.
 | Sign in | `POST /v1/auth/login` | Staff ID (the `FieldOfficer` username or EmployeeID) and PIN. No SMS step. Locks out after repeated failures. The answer carries the banker and the limits. |
 | Renew session | `POST /v1/auth/refresh` | Used automatically when a call is refused as expired. Calls made together share one renewal. |
 | Members | `GET /v1/members?limit=&cursor=` | The banker's branch, with each member's savings account id and balance. About 25 calls for 5,000 members. |
+| Office decision | `GET /v1/deposits?since=` | What the office did with each collection: `PENDING`, `APPROVED`, `VERIFIED` (checked at end of day) or `REJECTED`. The app asks only while something is still waiting. |
 | Send a deposit | `POST /v1/deposits` | `localTransactionId`, `memberCode`, `accountId`, `amount`, `collectedAt`. 201 accepted, 200 duplicate, 409 conflict, 422 refused with a reason. |
 
 A banker is checked against the core on every request, so disabling them in the core cuts their access at once.
@@ -42,7 +43,7 @@ A banker is checked against the core on every request, so disabling them in the 
 
 1. Which savings account a deposit goes to when a member has several. The server uses the lowest active account id.
 2. Whether the office wants a banker's own ledger assigned (older versions allow bankers without one; newer ones refuse to approve without it).
-3. The statuses to show the banker back: `PENDING`, `APPROVED`, `VERIFIED`, `REJECTED`. The server already exposes them at `GET /v1/deposits`; the app does not show them yet.
+3. Whether the office wants to give a reason when it refuses a collection. The app shows the reason from the core's rejection record when there is one (newer versions); older versions only give "refused".
 
 ## Running against a real server
 

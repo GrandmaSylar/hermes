@@ -70,7 +70,7 @@ const deposit = {
 
 const make = (routes: Record<string, Route>) => {
   const server = fakeServer(routes);
-  const tokens: Array<{ accessToken: string; refreshToken: string }> = [];
+  const tokens: { accessToken: string; refreshToken: string }[] = [];
   const api = new HttpApi({ baseUrl: 'https://field.test/', fetchImpl: server.fetchImpl, onTokens: (t) => tokens.push(t) });
   return { api, calls: server.calls, tokens };
 };
@@ -139,7 +139,7 @@ describe('sign-in', () => {
 
   test('this server has no SMS code step, and only savings deposits', () => {
     const { api } = make({});
-    expect(api.capabilities).toEqual({ otp: false, registration: false, shareContribution: false, loanRepayment: false });
+    expect(api.capabilities).toEqual({ otp: false, registration: false, officeDecisions: true, shareContribution: false, loanRepayment: false });
   });
 });
 
@@ -264,6 +264,42 @@ describe('sending deposits', () => {
   test('server trouble is a server error so the item stays waiting and is retried', async () => {
     const { api } = make({ 'POST /v1/deposits': () => ({ status: 500, body: { message: 'Something went wrong. Try again.' } }) });
     await expect(api.pushTransactions(session, [deposit])).rejects.toMatchObject({ kind: 'SERVER' });
+  });
+});
+
+describe('office decisions', () => {
+  test('maps the server statuses to the four the app shows, and keeps the reason for a refusal', async () => {
+    const { api, calls } = make({
+      'GET /v1/deposits': () => ({
+        status: 200,
+        body: {
+          items: [
+            { serverId: '1', localTransactionId: 'a-0000001', status: 'PENDING', decidedAt: null, reason: null },
+            { serverId: '2', localTransactionId: 'b-0000002', status: 'APPROVED', decidedAt: '2026-11-25T10:00:00.000Z', reason: null },
+            { serverId: '3', localTransactionId: 'c-0000003', status: 'VERIFIED', decidedAt: '2026-11-25T17:00:00.000Z', reason: null },
+            { serverId: '4', localTransactionId: 'd-0000004', status: 'REJECTED', decidedAt: '2026-11-25T11:00:00.000Z', reason: 'Wrong amount.' },
+            { serverId: '5', localTransactionId: 'e-0000005', status: 'REVERSED', decidedAt: null, reason: null },
+            { serverId: '6', localTransactionId: '', status: 'APPROVED', decidedAt: null, reason: null },
+            { serverId: '7', localTransactionId: 'g-0000007', status: 'approved', decidedAt: null, reason: 'ignored for non-refusals' },
+          ],
+        },
+      }),
+    });
+    const decisions = await api.pullDecisions(session, '2026-11-25T09:00:00.000Z');
+    expect(calls[0].path).toBe('/v1/deposits?limit=500&since=2026-11-25T09%3A00%3A00.000Z');
+    expect(decisions).toEqual([
+      { localTransactionId: 'a-0000001', status: 'PENDING', decidedAt: null, reason: null },
+      { localTransactionId: 'b-0000002', status: 'APPROVED', decidedAt: '2026-11-25T10:00:00.000Z', reason: null },
+      { localTransactionId: 'c-0000003', status: 'VERIFIED', decidedAt: '2026-11-25T17:00:00.000Z', reason: null },
+      { localTransactionId: 'd-0000004', status: 'REJECTED', decidedAt: '2026-11-25T11:00:00.000Z', reason: 'Wrong amount.' },
+      { localTransactionId: 'g-0000007', status: 'APPROVED', decidedAt: null, reason: null },
+    ]);
+  });
+
+  test('without a time it asks for the latest', async () => {
+    const { api, calls } = make({ 'GET /v1/deposits': () => ({ status: 200, body: { items: [] } }) });
+    expect(await api.pullDecisions(session, null)).toEqual([]);
+    expect(calls[0].path).toBe('/v1/deposits?limit=500');
   });
 });
 

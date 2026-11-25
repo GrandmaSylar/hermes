@@ -51,6 +51,6 @@ export async function captureCollection(
   await repos.members.bumpCollectCount(input.member.memberCode);
   return {
     ok: true,
-    item: { ...item, status: 'PENDING', attempts: 0, lastError: null, serverId: null },
+    item: { ...item, status: 'PENDING', attempts: 0, lastError: null, serverId: null, officeStatus: null, officeReason: null, officeDecidedAt: null },
   };
 }

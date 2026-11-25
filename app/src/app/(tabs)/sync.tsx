@@ -1,6 +1,7 @@
 import { useEffect, useState } from 'react';
 import { Alert, FlatList, Switch, Text, View } from 'react-native';
 import { formatAmount } from '@/domain/money';
+import { officeLine } from '@/domain/office';
 import { fullName, type RegistrationItem } from '@/domain/registration';
 import { PRODUCT_LABELS, type OutboxItem } from '@/domain/types';
 import { useApp } from '@/state/AppProvider';
@@ -11,6 +12,13 @@ function describeReport(offline: boolean, authError: boolean, pushed: number, re
   if (offline) return 'No connection. Items stay safe on this phone and sync automatically.';
   const regs = registrations > 0 ? `, ${registrations} registration${registrations === 1 ? '' : 's'}` : '';
   return `Last sync: ${pushed} collection${pushed === 1 ? '' : 's'} sent${regs}, ${pulled} members refreshed.`;
+}
+
+function OfficeStatusLine({ item }: { item: OutboxItem }) {
+  const line = officeLine(item);
+  if (!line) return null;
+  const color = line.tone === 'good' ? colors.ok : line.tone === 'bad' ? colors.danger : colors.muted;
+  return <Text style={{ color, marginTop: 6, fontWeight: line.tone === 'wait' ? '400' : '600' }}>{line.text}</Text>;
 }
 
 export default function SyncTab() {
@@ -102,6 +110,7 @@ export default function SyncTab() {
           <StatusPill status={item.status} />
           {item.serverId ? <Text style={{ color: colors.muted, fontSize: 12, marginTop: 6 }}>Reference {item.serverId}</Text> : null}
           {item.lastError ? <Text style={{ color: colors.danger, marginTop: 6 }}>{item.lastError}</Text> : null}
+          <OfficeStatusLine item={item} />
         </Card>
       )}
       ListEmptyComponent={<Text style={{ color: colors.muted, textAlign: 'center', padding: 24 }}>No collections captured yet.</Text>}

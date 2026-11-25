@@ -15,6 +15,8 @@ export interface SyncReport {
   registrationsRejected: number;
   /** Savings accounts refreshed from the core system. */
   accountsPulled: number;
+  /** Collections whose office decision (approved, verified, refused) changed. */
+  decisionsUpdated: number;
   /** The core system answered with an error the user cannot fix by retrying immediately. */
   serverError: string | null;
   /** The server could not be reached; items were left waiting. */
@@ -39,6 +41,9 @@ const KV_PULLED_AT = 'members.pulledAt';
 /** The core system's member list has no savings accounts, so they are pulled in a second stage. */
 const KV_STAGE = 'pull.stage';
 const KV_ACCOUNTS_CURSOR = 'accounts.cursor';
+const KV_DECISIONS_SINCE = 'decisions.since';
+/** Look back this far before the last check, so a decision made while the phone was asking is not missed. */
+const DECISION_OVERLAP_MS = 10 * 60 * 1000;
 
 let running: Promise<SyncReport> | null = null;
 
@@ -81,6 +86,7 @@ async function run(deps: SyncDeps): Promise<SyncReport> {
     registrationsSent: 0,
     registrationsRejected: 0,
     accountsPulled: 0,
+    decisionsUpdated: 0,
     serverError: null,
     offline: false,
     authError: false,
@@ -140,6 +146,7 @@ async function run(deps: SyncDeps): Promise<SyncReport> {
       }
     }
 
+    await pullDecisions(deps, report);
     await pullMembersIfStale(deps, report);
   } catch (error) {
     if (error instanceof ApiError && error.kind === 'NETWORK') report.offline = true;
@@ -148,6 +155,22 @@ async function run(deps: SyncDeps): Promise<SyncReport> {
     else throw error;
   }
   return report;
+}
+
+/**
+ * Asks the server what the office has decided about collections already sent.
+ * Skipped when nothing is waiting on the office, so an idle phone makes no call.
+ */
+async function pullDecisions(deps: SyncDeps, report: SyncReport): Promise<void> {
+  const { repos, api, session } = deps;
+  if (!api.capabilities.officeDecisions) return;
+  if ((await repos.outbox.awaitingDecision()) === 0) return;
+
+  const now = (deps.now ?? (() => new Date()))();
+  const stored = await repos.kv.get(KV_DECISIONS_SINCE);
+  const decisions = await api.pullDecisions(session, stored);
+  report.decisionsUpdated += await repos.outbox.applyOfficeDecisions(decisions);
+  await repos.kv.set(KV_DECISIONS_SINCE, new Date(now.getTime() - DECISION_OVERLAP_MS).toISOString());
 }
 
 function toPushRegistration(r: RegistrationItem): PushRegistration {

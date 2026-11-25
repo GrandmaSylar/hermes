@@ -28,11 +28,12 @@ This project does not modify or push to `cua-core` or `cua-core-api`. The core s
 - Offline-first member search over an encrypted local database (SQLCipher, key kept in the device keystore). The app refuses to store member data if SQLCipher is missing.
 - Cash collection capture saved to an on-device outbox, then synced automatically with idempotent delivery. With the real server only savings deposits are offered; the demo also shows share contributions and loan repayments.
 - Field member registration: name, gender, date of birth (18+), mobile number, ID type and number, address. Saved to the same on-device outbox and synced idempotently as a draft for office approval. The member has no member number and cannot transact until approved. The mock refuses a duplicate ID number. ID photo and signature capture are not built yet.
+- The sync screen shows what the office did with each collection that reached it: waiting, approved, approved and checked at end of day, or refused with the reason. The app asks only while something is still waiting on the office.
 - Sync screen, "my customers" and frequent members, and provisional daily credits, debits and net cash.
 - All server calls go through `src/data/api/contract.ts`. There are two implementations: `http.ts`, the real client for the field server (see `docs/core-integration.md`), and `mock.ts`, demo data that behaves like the fuller API in `docs/core-api-dev-brief.md`. Set `EXPO_PUBLIC_API_URL` to use the real one; without it the app shows a "Demo mode" banner.
 - Features the core cannot do yet (share contributions, loan repayments, member registration, SMS code) are switched off by `capabilities` and hidden in the app until the core supports them.
 
-Not built yet: ID photo and signature capture for registration, passkeys, showing the office's decision back to the banker, receipts printing, reconciliation views.
+Not built yet: ID photo and signature capture for registration, passkeys, receipts printing, reconciliation views.
 
 ## Run the app
 
