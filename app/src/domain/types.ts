@@ -3,9 +3,40 @@ export type ProductType = 'SAVINGS_DEPOSIT' | 'SHARE_CONTRIBUTION' | 'LOAN_REPAY
 
 export const PRODUCT_LABELS: Record<ProductType, string> = {
   SAVINGS_DEPOSIT: 'Savings deposit',
-  SHARE_CONTRIBUTION: 'Share contribution',
+  SHARE_CONTRIBUTION: 'Shares deposit',
   LOAN_REPAYMENT: 'Loan repayment',
 };
+
+/** What the core's field server calls the two kinds of deposit: a savings account or a share holding. */
+export type DepositKind = 'SAVINGS' | 'SHARES';
+
+/**
+ * How the member paid. Mobile Money is part of the design but hidden until the
+ * core can handle it (see ApiCapabilities.mobileMoney): approving it would
+ * post it as cash taken by the banker.
+ */
+export type PaymentMode = 'CASH' | 'MOBILE_MONEY';
+
+export const PAYMENT_LABELS: Record<PaymentMode, string> = {
+  CASH: 'Cash',
+  MOBILE_MONEY: 'Mobile Money',
+};
+
+/** One account a deposit can go to: a savings account, or a share holding. */
+export interface AccountOption {
+  /** The core's SavingsAccountID (savings) or ShareHoldingID (shares). */
+  id: number;
+  number: string;
+  productCode: string;
+  productName: string;
+  /** Two-decimal GHS balance as last read from the core. */
+  balance: string;
+}
+
+export interface MemberAccounts {
+  savings: AccountOption[];
+  shares: AccountOption[];
+}
 
 /**
  * Lifecycle of a captured item on the device.
@@ -39,6 +70,8 @@ export interface Member {
   asOf: string;
   /** The member's savings account at the core system. Deposits need it. Null until synced. */
   savingsAccountId: number | null;
+  /** Every account a deposit can go to. A member can have several of each kind. */
+  accounts: MemberAccounts;
   myCustomer: boolean;
   /** How many items the mobilizer has captured for this member. Drives suggestions. */
   collectCount: number;
@@ -68,6 +101,9 @@ export interface OutboxItem {
   createdAt: string;
   /** The core system's savings account id, copied from the member when the item was captured. */
   accountId: number | null;
+  /** Which account it went to, e.g. "Ordinary Savings · 1-KS", fixed at confirmation. Null for older items. */
+  accountLabel: string | null;
+  paymentMode: PaymentMode;
   /** The office's decision, once the item has reached it. Null until the app hears back. */
   officeStatus: OfficeStatus | null;
   officeReason: string | null;

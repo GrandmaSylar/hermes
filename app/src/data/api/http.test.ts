@@ -62,10 +62,12 @@ const deposit = {
   localTransactionId: 'local-0001',
   memberCode: '100001',
   productType: 'SAVINGS_DEPOSIT' as const,
+  kind: 'SAVINGS' as const,
   amount: '40.00',
   reference: null,
   collectedAt: '2026-11-18T08:00:00.000Z',
   accountId: 500001,
+  paymentMode: 'CASH' as const,
 };
 
 const make = (routes: Record<string, Route>) => {
@@ -137,9 +139,16 @@ describe('sign-in', () => {
     await expect(api.login('mabel', '1234', DEVICE)).rejects.toMatchObject({ kind: 'NETWORK' });
   });
 
-  test('this server has no SMS code step, and only savings deposits', () => {
+  test('this server has no SMS code step, takes savings and shares, and hides Mobile Money', () => {
     const { api } = make({});
-    expect(api.capabilities).toEqual({ otp: false, registration: false, officeDecisions: true, shareContribution: false, loanRepayment: false });
+    expect(api.capabilities).toEqual({
+      otp: false,
+      registration: false,
+      officeDecisions: true,
+      mobileMoney: false,
+      shareContribution: true,
+      loanRepayment: false,
+    });
   });
 });
 
@@ -172,6 +181,63 @@ describe('reading members', () => {
     expect(page.items[0].balances).toMatchObject({ shares: null, loan: null });
   });
 
+  test('maps several savings accounts and share holdings, and totals the balances', async () => {
+    const { api } = make({
+      'GET /v1/members': () => ({
+        status: 200,
+        body: {
+          items: [
+            {
+              code: '1001',
+              fullName: 'Ama Mensah',
+              phone: '0241234567',
+              status: 'ACTIVE',
+              savingsAccountId: 500001,
+              savingsBalance: '100.10',
+              accounts: {
+                savings: [
+                  { id: 500001, number: '1-KS', productCode: 'KS', productName: 'Ordinary Savings', balance: '100.10' },
+                  { id: 500002, number: '1-SU', productCode: 'SU', productName: 'Susu Savings', balance: '20.5' },
+                ],
+                shares: [{ id: 800001, number: '1-SH', productCode: 'SH', productName: 'Ordinary Shares', balance: '75.00' }],
+              },
+            },
+            { code: '1002', fullName: 'Kofi', status: 'ACTIVE', savingsAccountId: null, savingsBalance: null, accounts: { savings: [], shares: [] } },
+          ],
+          nextCursor: null,
+        },
+      }),
+    });
+    const [ama, kofi] = (await api.pullMembers(session, null)).items;
+    expect(ama.accounts.savings).toEqual([
+      { id: 500001, number: '1-KS', productCode: 'KS', productName: 'Ordinary Savings', balance: '100.10' },
+      { id: 500002, number: '1-SU', productCode: 'SU', productName: 'Susu Savings', balance: '20.50' },
+    ]);
+    expect(ama.accounts.shares).toHaveLength(1);
+    expect(ama.accounts.shares[0]).toMatchObject({ id: 800001, productName: 'Ordinary Shares', balance: '75.00' });
+    expect(ama.balances).toEqual({ savings: '120.60', shares: '75.00', loan: null });
+    expect(kofi.accounts).toEqual({ savings: [], shares: [] });
+  });
+
+  test('an older server with no accounts still gives the member one savings account', async () => {
+    const { api } = make({
+      'GET /v1/members': () => ({
+        status: 200,
+        body: { items: [{ code: '1001', fullName: 'Ama', status: 'ACTIVE', savingsAccountId: 500001, savingsBalance: '12.5' }], nextCursor: null },
+      }),
+    });
+    const [ama] = (await api.pullMembers(session, null)).items;
+    expect(ama.accounts.savings).toEqual([{ id: 500001, number: '500001', productCode: '', productName: 'Savings', balance: '12.50' }]);
+    expect(ama.accounts.shares).toEqual([]);
+    expect(ama.balances.savings).toBe('12.50');
+  });
+
+  test('accounts without a usable id are dropped', async () => {
+    const m = mapMember({ code: '1', status: 'ACTIVE', accounts: { savings: [{ id: 'x', balance: '1' }, { number: 'n' }, { id: 0 }, { id: 7, balance: '1' }], shares: 'oops' } }, 'now', '100');
+    expect(m.accounts.savings.map((a) => a.id)).toEqual([7]);
+    expect(m.accounts.shares).toEqual([]);
+  });
+
   test('the last page has no cursor', async () => {
     const { api } = make({ 'GET /v1/members': () => ({ status: 200, body: { items: [], nextCursor: null } }) });
     expect((await api.pullMembers(session, null)).nextCursor).toBeNull();
@@ -197,6 +263,8 @@ describe('sending deposits', () => {
       accountId: 500001,
       amount: '40.00',
       collectedAt: '2026-11-18T08:00:00.000Z',
+      kind: 'SAVINGS',
+      paymentMode: 'CASH',
     });
   });
 
@@ -206,14 +274,35 @@ describe('sending deposits', () => {
     expect(result).toEqual({ localTransactionId: 'local-0001', status: 'DUPLICATE', serverId: '898361' });
   });
 
-  test('only savings deposits with an account are sent', async () => {
-    const { api, calls } = make({});
-    const [share, noAccount] = await api.pushTransactions(session, [
-      { ...deposit, localTransactionId: 'a', productType: 'SHARE_CONTRIBUTION' },
-      { ...deposit, localTransactionId: 'b', accountId: null },
+  test('a shares deposit is sent as kind SHARES with the share holding id', async () => {
+    const { api, calls } = make({ 'POST /v1/deposits': accepted });
+    const [result] = await api.pushTransactions(session, [
+      { ...deposit, localTransactionId: 'share-1', productType: 'SHARE_CONTRIBUTION', kind: 'SHARES', accountId: 800001 },
     ]);
-    expect(share.status).toBe('REJECTED');
-    expect(noAccount.status).toBe('REJECTED');
+    expect(result.status).toBe('ACCEPTED');
+    expect(calls[0].body).toEqual({
+      localTransactionId: 'share-1',
+      kind: 'SHARES',
+      memberCode: '100001',
+      accountId: 800001,
+      amount: '40.00',
+      collectedAt: '2026-11-18T08:00:00.000Z',
+      paymentMode: 'CASH',
+    });
+  });
+
+  test('nothing is sent without an account, for a loan repayment, for Mobile Money, or with a kind that does not match', async () => {
+    const { api, calls } = make({});
+    const results = await api.pushTransactions(session, [
+      { ...deposit, localTransactionId: 'a', accountId: null },
+      { ...deposit, localTransactionId: 'b', productType: 'LOAN_REPAYMENT' },
+      { ...deposit, localTransactionId: 'c', paymentMode: 'MOBILE_MONEY' },
+      { ...deposit, localTransactionId: 'd', kind: 'SHARES' },
+      { ...deposit, localTransactionId: 'e', productType: 'SHARE_CONTRIBUTION', kind: 'SHARES', accountId: null },
+    ]);
+    expect(results.map((r) => r.status)).toEqual(['REJECTED', 'REJECTED', 'REJECTED', 'REJECTED', 'REJECTED']);
+    expect(results[2].reason).toMatch(/only cash/i);
+    expect(results[4].reason).toMatch(/shares account/);
     expect(calls).toHaveLength(0);
   });
 

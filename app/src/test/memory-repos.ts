@@ -24,6 +24,8 @@ class MemoryMembers implements MemberRepo {
       this.rows.set(m.memberCode, {
         ...m,
         savingsAccountId: m.savingsAccountId ?? old?.savingsAccountId ?? null,
+        // A refresh replaces the member's accounts, so a closed account disappears.
+        accounts: { savings: m.accounts.savings.map((a) => ({ ...a })), shares: m.accounts.shares.map((a) => ({ ...a })) },
         myCustomer: old?.myCustomer ?? false,
         collectCount: old?.collectCount ?? 0,
       });

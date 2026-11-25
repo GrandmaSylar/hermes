@@ -106,6 +106,7 @@ export default function SyncTab() {
           <Text style={{ color: colors.muted, marginTop: 2 }}>
             {PRODUCT_LABELS[item.productType]} · {new Date(item.collectedAt).toLocaleString()}
           </Text>
+          {item.accountLabel ? <Text style={{ color: colors.muted, marginTop: 2 }}>{item.accountLabel}</Text> : null}
           <View style={{ height: 8 }} />
           <StatusPill status={item.status} />
           {item.serverId ? <Text style={{ color: colors.muted, fontSize: 12, marginTop: 6 }}>Reference {item.serverId}</Text> : null}

@@ -1,4 +1,5 @@
-import type { MobilizerLimits, Session } from '@/domain/types';
+import { kindForProduct, sumBalances } from '@/domain/deposit';
+import type { AccountOption, MemberAccounts, MobilizerLimits, Session } from '@/domain/types';
 import {
   ApiError,
   type ApiCapabilities,
@@ -92,19 +93,68 @@ export function mapMemberStatus(status: string): ServerMember['status'] {
   return 'INACTIVE';
 }
 
+/** One list of accounts from the server. Rows without a usable id are dropped. */
+function mapAccountList(value: unknown, fallbackName: string): AccountOption[] {
+  const accounts: AccountOption[] = [];
+  for (const row of Array.isArray(value) ? value : []) {
+    const r = asRecord(row);
+    const id = Number(r.id);
+    if (r.id == null || !Number.isInteger(id) || id <= 0) continue;
+    accounts.push({
+      id,
+      number: asText(r.number).trim() || String(id),
+      productCode: asText(r.productCode).trim(),
+      productName: asText(r.productName).trim() || fallbackName,
+      balance: twoDecimals(r.balance) ?? '0.00',
+    });
+  }
+  return accounts;
+}
+
+/**
+ * The member's accounts. An older server sends no `accounts` object; the one
+ * savings account it does send is then offered, so the app still works.
+ */
+export function mapAccounts(r: Json, savingsAccountId: number | null): MemberAccounts {
+  const raw = r.accounts;
+  if (raw && typeof raw === 'object' && !Array.isArray(raw)) {
+    const a = asRecord(raw);
+    return { savings: mapAccountList(a.savings, 'Savings'), shares: mapAccountList(a.shares, 'Shares') };
+  }
+  if (savingsAccountId == null) return { savings: [], shares: [] };
+  return {
+    savings: [
+      {
+        id: savingsAccountId,
+        number: String(savingsAccountId),
+        productCode: '',
+        productName: 'Savings',
+        balance: twoDecimals(r.savingsBalance) ?? '0.00',
+      },
+    ],
+    shares: [],
+  };
+}
+
 export function mapMember(row: unknown, asOf: string, branchCode: string): ServerMember {
   const r = asRecord(row);
   const accountId = Number(r.savingsAccountId);
+  const savingsAccountId = r.savingsAccountId != null && Number.isInteger(accountId) && accountId > 0 ? accountId : null;
+  const accounts = mapAccounts(r, savingsAccountId);
+  // The savings figure is the total over the member's savings accounts; with one account it is that balance.
+  const savings =
+    accounts.savings.length > 0 ? sumBalances(accounts.savings.map((a) => a.balance)) : (twoDecimals(r.savingsBalance) ?? '0.00');
   return {
     memberCode: asText(r.code),
     name: asText(r.fullName).trim(),
     phone: asText(r.phone),
     status: mapMemberStatus(asText(r.status)),
     branchCode,
-    // Savings come with the member. Shares and loan are not available to the field channel.
-    balances: { savings: twoDecimals(r.savingsBalance) ?? '0.00', shares: null, loan: null },
+    // Shares are the total over the member's share holdings. The loan is not available to the field channel.
+    balances: { savings, shares: accounts.shares.length > 0 ? sumBalances(accounts.shares.map((a) => a.balance)) : null, loan: null },
     asOf,
-    savingsAccountId: r.savingsAccountId != null && Number.isInteger(accountId) && accountId > 0 ? accountId : null,
+    savingsAccountId,
+    accounts,
   };
 }
 
@@ -113,7 +163,9 @@ export class HttpApi implements ApiClient {
     otp: false,
     registration: false,
     officeDecisions: true,
-    shareContribution: false,
+    // Hidden until the core can record Mobile Money as such: approval would post it as banker cash.
+    mobileMoney: false,
+    shareContribution: true,
     loanRepayment: false,
   };
 
@@ -230,18 +282,29 @@ export class HttpApi implements ApiClient {
 
   private async pushOne(session: Session, item: PushItem): Promise<PushResult> {
     const id = item.localTransactionId;
-    if (item.productType !== 'SAVINGS_DEPOSIT') {
+    // Savings and shares deposits only. A loan repayment is never sent.
+    if (item.productType !== 'SAVINGS_DEPOSIT' && item.productType !== 'SHARE_CONTRIBUTION') {
       return { localTransactionId: id, status: 'REJECTED', reason: 'The core system does not accept this type of collection from the field yet.' };
     }
+    if (kindForProduct(item.productType) !== item.kind) {
+      return { localTransactionId: id, status: 'REJECTED', reason: 'This deposit does not match its account type.' };
+    }
+    // The core would post any approved deposit as banker cash, so Mobile Money is never sent.
+    if (item.paymentMode !== 'CASH') {
+      return { localTransactionId: id, status: 'REJECTED', reason: 'Only cash deposits can be sent to the office yet.' };
+    }
     if (item.accountId == null) {
-      return { localTransactionId: id, status: 'REJECTED', reason: 'This member has no savings account on file.' };
+      const what = item.kind === 'SHARES' ? 'shares account' : 'savings account';
+      return { localTransactionId: id, status: 'REJECTED', reason: `This deposit has no ${what} on file.` };
     }
     const body = {
       localTransactionId: id,
+      kind: item.kind,
       memberCode: item.memberCode,
       accountId: item.accountId,
       amount: item.amount,
       collectedAt: item.collectedAt,
+      paymentMode: item.paymentMode,
     };
     try {
       const saved = asRecord(await this.send(session, 'POST', `${V1}/deposits`, body));

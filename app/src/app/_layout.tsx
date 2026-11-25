@@ -18,7 +18,7 @@ export default function RootLayout() {
         <Stack.Screen name="login" options={{ headerShown: false }} />
         <Stack.Screen name="(tabs)" options={{ headerShown: false }} />
         <Stack.Screen name="member/[code]" options={{ title: 'Member' }} />
-        <Stack.Screen name="collect/[code]" options={{ title: 'Collect' }} />
+        <Stack.Screen name="collect/[code]" options={{ title: 'Deposit' }} />
         <Stack.Screen name="register" options={{ title: 'Register member' }} />
       </Stack>
     </AppProvider>
