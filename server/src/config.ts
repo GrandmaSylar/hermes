@@ -22,6 +22,8 @@ export interface Config {
   maxBackdateDays: number;
   pinMaxAttempts: number;
   pinLockoutMinutes: number;
+  /** Text the member when a deposit is stored as pending. Also needs the core's SMS_Enabled setting. */
+  smsPendingEnabled: boolean;
 }
 
 function need(env: NodeJS.ProcessEnv, key: string): string {
@@ -61,5 +63,6 @@ export function loadConfig(env: NodeJS.ProcessEnv = process.env): Config {
     maxBackdateDays: Number(env.MAX_BACKDATE_DAYS ?? 7),
     pinMaxAttempts: Number(env.PIN_MAX_ATTEMPTS ?? 5),
     pinLockoutMinutes: Number(env.PIN_LOCKOUT_MINUTES ?? 15),
+    smsPendingEnabled: flag(env.SMS_PENDING_ENABLED, false),
   };
 }

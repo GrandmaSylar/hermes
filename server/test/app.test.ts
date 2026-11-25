@@ -18,6 +18,7 @@ const config: Config = {
   maxBackdateDays: 7,
   pinMaxAttempts: 3,
   pinLockoutMinutes: 15,
+  smsPendingEnabled: false,
 };
 
 let repo: MemoryRepo;
@@ -31,15 +32,15 @@ function setup() {
     { id: '1009', staffId: 'nopin', fullName: 'No Pin', branchCode: '100', passwordHash: null, active: true },
   ];
   repo.members = [
-    { code: '10', fullName: 'Ama', phone: null, statusCode: 'ACT', isActive: true, savingsAccountId: 500, savingsBalance: '100.00' },
-    { code: '11', fullName: 'Kofi', phone: null, statusCode: 'INACT', isActive: true, savingsAccountId: 501, savingsBalance: '5.00' },
-    { code: '12', fullName: 'Esi', phone: null, statusCode: 'ACT', isActive: true, savingsAccountId: 502, savingsBalance: '0.00' },
+    { code: '10', fullName: 'Ama', phone: null, statusCode: 'ACT', isActive: true, savingsAccountId: 500, savingsBalance: '100.00', accounts: { savings: [], shares: [] } },
+    { code: '11', fullName: 'Kofi', phone: null, statusCode: 'INACT', isActive: true, savingsAccountId: 501, savingsBalance: '5.00', accounts: { savings: [], shares: [] } },
+    { code: '12', fullName: 'Esi', phone: null, statusCode: 'ACT', isActive: true, savingsAccountId: 502, savingsBalance: '0.00', accounts: { savings: [], shares: [] } },
   ];
   repo.accounts = [
-    { savingsAccountId: 500, customerCode: '10', branchCode: '100', accountStatus: 'ACTIVE', currentBalance: '100.00', customerActive: true, customerStatusCode: 'ACT' },
-    { savingsAccountId: 501, customerCode: '11', branchCode: '100', accountStatus: 'ACTIVE', currentBalance: '5.00', customerActive: true, customerStatusCode: 'INACT' },
-    { savingsAccountId: 502, customerCode: '12', branchCode: '200', accountStatus: 'ACTIVE', currentBalance: '0.00', customerActive: true, customerStatusCode: 'ACT' },
-    { savingsAccountId: 503, customerCode: '10', branchCode: '100', accountStatus: 'DORMANT', currentBalance: '0.00', customerActive: true, customerStatusCode: 'ACT' },
+    { kind: 'SAVINGS', accountId: 500, customerCode: '10', branchCode: '100', accountStatus: 'ACTIVE', currentBalance: '100.00', customerActive: true, customerStatusCode: 'ACT' },
+    { kind: 'SAVINGS', accountId: 501, customerCode: '11', branchCode: '100', accountStatus: 'ACTIVE', currentBalance: '5.00', customerActive: true, customerStatusCode: 'INACT' },
+    { kind: 'SAVINGS', accountId: 502, customerCode: '12', branchCode: '200', accountStatus: 'ACTIVE', currentBalance: '0.00', customerActive: true, customerStatusCode: 'ACT' },
+    { kind: 'SAVINGS', accountId: 503, customerCode: '10', branchCode: '100', accountStatus: 'DORMANT', currentBalance: '0.00', customerActive: true, customerStatusCode: 'ACT' },
   ];
   return buildApp({ config, repo, now: () => NOW });
 }
