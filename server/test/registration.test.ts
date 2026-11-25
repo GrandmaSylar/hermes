@@ -41,7 +41,6 @@ const form = (over: Record<string, unknown> = {}) => ({
   sex: 'Male',
   nationalId: 'GHA-123456789-0',
   phone: '0244123456',
-  contactValue: '0244123456',
   residentialAddress: 'House 4, Kasoa',
   region: 'Central',
   city: 'Kasoa',

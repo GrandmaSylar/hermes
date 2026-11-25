@@ -177,7 +177,7 @@ export const registrationBody = z.object({
   // Contact information
   phone: z.string().trim().max(50),
   email: text(150),
-  contactValue: z.string().trim().max(200),
+  contactValue: text(200),
   mobileAlert: text(50),
   allowMarketing: flag,
   preferredContactTime: text(50),
@@ -273,7 +273,6 @@ export function registrationProblems(body: RegistrationBody, today: Date): strin
   if (!required(body.residentialAddress)) errors.push('Residential Address is required');
   if (!required(body.region)) errors.push('Region is required');
   if (!required(body.city)) errors.push('City is required');
-  if (!required(body.contactValue)) errors.push('Contact Value is required');
 
   // Employment
   if (body.yearsWithEmployer && !/^\d+(\.\d{1,2})?$/.test(body.yearsWithEmployer)) errors.push('Years with Employer must be a number');

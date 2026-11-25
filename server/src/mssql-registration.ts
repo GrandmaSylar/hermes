@@ -197,7 +197,7 @@ export async function registerMember(
     await child()
       .input('phone', sql.VarChar(50), body.phone.trim())
       .input('email', sql.VarChar(150), orNull(body.email))
-      .input('contactValue', sql.VarChar(200), body.contactValue.trim())
+      .input('contactValue', sql.VarChar(200), (body.contactValue.trim() || `${body.phone.trim()} | ${body.email.trim()}`).slice(0, 200))
       .input('mobileAlert', sql.VarChar(50), (body.mobileAlert || body.phone).trim())
       .input('subscribe', sql.Bit, 1)
       .input('marketing', sql.Bit, yn(body.allowMarketing))
