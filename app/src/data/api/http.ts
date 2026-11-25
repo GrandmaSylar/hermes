@@ -1,9 +1,12 @@
 import { kindForProduct, sumBalances } from '@/domain/deposit';
+import type { MemberTypeOption } from '@/domain/registration';
 import type { AccountOption, MemberAccounts, MobilizerLimits, Session } from '@/domain/types';
 import {
   ApiError,
   type ApiCapabilities,
   type ApiClient,
+  type MemberConflict,
+  type MemberLookup,
   type MemberPage,
   type OfficeDecision,
   type PushItem,
@@ -342,9 +345,57 @@ export class HttpApi implements ApiClient {
     return decisions;
   }
 
-  async pushRegistrations(_session: Session, _items: PushRegistration[]): Promise<RegistrationResult[]> {
-    // Switched off in `capabilities`; the sync engine never calls this.
-    throw new ApiError('SERVER', 'Registering members from the field is not available yet.');
+  /** Registration is only offered once the server says it is switched on (its database must allow it). */
+  async refreshCapabilities(session: Session): Promise<void> {
+    const body = asRecord(await this.send(session, 'GET', `${V1}/me`));
+    this.capabilities.registration = asRecord(body.capabilities).registration === true;
+  }
+
+  async pushRegistrations(session: Session, items: PushRegistration[]): Promise<RegistrationResult[]> {
+    const results: RegistrationResult[] = [];
+    for (const item of items) results.push(await this.registerOne(session, item));
+    return results;
+  }
+
+  private async registerOne(session: Session, item: PushRegistration): Promise<RegistrationResult> {
+    const id = item.localRegistrationId;
+    try {
+      const saved = asRecord(await this.send(session, 'POST', `${V1}/registrations`, item));
+      const status = asText(saved.status) === 'DUPLICATE' ? 'DUPLICATE' : 'ACCEPTED';
+      return { localRegistrationId: id, status, serverId: asText(saved.serverId) || undefined };
+    } catch (error) {
+      if (error instanceof HttpStatusError) {
+        // 409: the same id came back with different details. 400 and 422: the rules refused it.
+        return { localRegistrationId: id, status: error.status === 409 ? 'CONFLICT' : 'REJECTED', reason: error.message };
+      }
+      throw error;
+    }
+  }
+
+  async memberTypes(session: Session): Promise<MemberTypeOption[]> {
+    const body = asRecord(await this.send(session, 'GET', `${V1}/member-types`));
+    const types: MemberTypeOption[] = [];
+    for (const row of Array.isArray(body.items) ? body.items.map(asRecord) : []) {
+      const code = asText(row.code).trim();
+      if (!code) continue;
+      types.push({
+        code,
+        label: asText(row.label).trim() || code,
+        sharesOptional: row.sharesOptional === true,
+        guardianRequired: row.guardianRequired === true,
+      });
+    }
+    return types;
+  }
+
+  async checkMember(session: Session, lookup: MemberLookup): Promise<MemberConflict[]> {
+    const body = asRecord(await this.send(session, 'POST', `${V1}/members/check`, lookup));
+    return (Array.isArray(body.conflicts) ? body.conflicts.map(asRecord) : []).map((c) => ({
+      label: asText(c.label),
+      value: asText(c.value),
+      memberCode: asText(c.memberCode),
+      memberName: asText(c.memberName),
+    }));
   }
 
   // ---- plumbing -------------------------------------------------------

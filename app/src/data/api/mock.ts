@@ -1,3 +1,4 @@
+import { DEFAULT_MEMBER_TYPES, type MemberTypeOption } from '@/domain/registration';
 import { kindForProduct, sumBalances } from '@/domain/deposit';
 import { toMinor } from '@/domain/money';
 import type { AccountOption, MobilizerLimits, Session } from '@/domain/types';
@@ -10,6 +11,8 @@ import {
   type SavingsAccountPage,
   type SignInResult,
   type PushItem,
+  type MemberConflict,
+  type MemberLookup,
   type PushRegistration,
   type PushResult,
   type RegistrationResult,
@@ -197,6 +200,27 @@ export class MockApi implements ApiClient {
   private readonly registeredIds = new Set<string>();
   private nextDraftId = 1;
 
+  async memberTypes(_session: Session): Promise<MemberTypeOption[]> {
+    this.guard();
+    return DEFAULT_MEMBER_TYPES;
+  }
+
+  /** Who holds these IDs or this phone: members registered through this mock, by ID number. */
+  async checkMember(_session: Session, lookup: MemberLookup): Promise<MemberConflict[]> {
+    this.guard();
+    const out: MemberConflict[] = [];
+    const ids: [string, string | undefined][] = [
+      ['Ghana Card', lookup.nationalId],
+      ['Voter ID', lookup.voterIdNo],
+      ['NHIS card', lookup.nhisNo],
+      ['Passport', lookup.passportNo],
+    ];
+    for (const [label, value] of ids) {
+      if (value && this.registeredIds.has(value)) out.push({ label, value, memberCode: 'MOCK', memberName: 'Another member' });
+    }
+    return out;
+  }
+
   async pushRegistrations(session: Session, items: PushRegistration[]): Promise<RegistrationResult[]> {
     this.guard();
     return items.map((item) => this.acceptRegistration(session, item));
@@ -205,7 +229,7 @@ export class MockApi implements ApiClient {
   private acceptRegistration(session: Session, item: PushRegistration): RegistrationResult {
     const id = item.localRegistrationId;
     const key = `${session.deviceId}:${id}`;
-    const fingerprint = [item.firstName, item.lastName, item.dateOfBirth, item.phone, item.idType, item.idNumber].join('|');
+    const fingerprint = [item.firstName, item.lastName, item.birthDate, item.phone, item.nationalId, item.voterIdNo, item.nhisNo, item.passportNo].join('|');
     const existing = this.registrationsSeen.get(key);
     if (existing) {
       return existing.fingerprint === fingerprint
@@ -213,15 +237,15 @@ export class MockApi implements ApiClient {
         : { localRegistrationId: id, status: 'CONFLICT', reason: 'This registration was already received with different details.' };
     }
     // The core system refuses a second member with the same ID number.
-    const idKey = `${item.idType}:${item.idNumber}`;
-    if (this.registeredIds.has(idKey)) {
+    const idKeys = [item.nationalId, item.voterIdNo, item.nhisNo, item.passportNo].filter(Boolean);
+    if (idKeys.some((k) => this.registeredIds.has(k))) {
       return {
         localRegistrationId: id,
         status: 'REJECTED',
         reason: 'A member with this ID number is already registered or waiting for approval.',
       };
     }
-    this.registeredIds.add(idKey);
+    idKeys.forEach((k) => this.registeredIds.add(k));
     const serverId = `MD-${String(this.nextDraftId++).padStart(6, '0')}`;
     this.registrationsSeen.set(key, { fingerprint, serverId });
     return { localRegistrationId: id, status: 'ACCEPTED', serverId };

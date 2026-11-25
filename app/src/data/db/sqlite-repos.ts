@@ -432,6 +432,7 @@ interface RegistrationRow {
   last_error: string | null;
   server_id: string | null;
   created_at: string;
+  payload: string | null;
 }
 
 const toRegistration = (row: RegistrationRow): RegistrationItem => ({
@@ -450,7 +451,23 @@ const toRegistration = (row: RegistrationRow): RegistrationItem => ({
   lastError: row.last_error,
   serverId: row.server_id,
   createdAt: row.created_at,
+  payload: parsePayload(row.payload),
 });
+
+/** The ID numbers a saved registration holds for the member themselves. */
+function registeredIds(primary: string, payload: RegistrationItem['payload']): string[] {
+  const own = payload ? [payload.nationalId, payload.voterIdNo, payload.nhisNo, payload.passportNo] : [];
+  return [primary, ...own].filter(Boolean);
+}
+
+function parsePayload(text: string | null): RegistrationItem['payload'] {
+  if (!text) return null;
+  try {
+    return JSON.parse(text) as RegistrationItem['payload'];
+  } catch {
+    return null;
+  }
+}
 
 class SqliteRegistrationRepo implements RegistrationRepo {
   constructor(private readonly db: SQLite.SQLiteDatabase) {}
@@ -460,8 +477,8 @@ class SqliteRegistrationRepo implements RegistrationRepo {
     await this.db.runAsync(
       `INSERT OR IGNORE INTO registrations
        (local_reg_id, first_name, last_name, gender, date_of_birth, phone, id_type, id_number, address,
-        captured_at, status, attempts, created_at)
-       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'PENDING', 0, ?)`,
+        captured_at, status, attempts, created_at, payload)
+       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'PENDING', 0, ?, ?)`,
       item.localRegistrationId,
       item.firstName,
       item.lastName,
@@ -473,6 +490,7 @@ class SqliteRegistrationRepo implements RegistrationRepo {
       item.address,
       item.capturedAt,
       item.createdAt,
+      item.payload ? JSON.stringify(item.payload) : null,
     );
   }
 
@@ -540,11 +558,14 @@ class SqliteRegistrationRepo implements RegistrationRepo {
   }
 
   async hasIdNumber(idNumber: string): Promise<boolean> {
-    const row = await this.db.getFirstAsync<{ n: number }>(
-      "SELECT count(*) AS n FROM registrations WHERE id_number = ? AND status <> 'REJECTED'",
+    // A cheap filter in SQL, then the exact check: the member's own four IDs, never the guardian's.
+    const like = `%${idNumber.replace(/[\\%_]/g, (c) => `\\${c}`)}%`;
+    const rows = await this.db.getAllAsync<{ id_number: string; payload: string | null }>(
+      "SELECT id_number, payload FROM registrations WHERE status <> 'REJECTED' AND (id_number = ? OR payload LIKE ? ESCAPE '\\')",
       idNumber,
+      like,
     );
-    return (row?.n ?? 0) > 0;
+    return rows.some((r) => registeredIds(r.id_number, parsePayload(r.payload)).includes(idNumber));
   }
 
   async forDay(day: string): Promise<RegistrationItem[]> {

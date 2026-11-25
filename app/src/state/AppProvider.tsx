@@ -3,7 +3,7 @@ import * as Crypto from 'expo-crypto';
 import type * as SQLite from 'expo-sqlite';
 import { createContext, useCallback, useContext, useEffect, useMemo, useRef, useState, type ReactNode } from 'react';
 import { AppState } from 'react-native';
-import type { ApiCapabilities, ApiClient } from '@/data/api/contract';
+import type { ApiCapabilities, ApiClient, MemberConflict, MemberLookup } from '@/data/api/contract';
 import { HttpApi } from '@/data/api/http';
 import { MockApi } from '@/data/api/mock';
 import { API_MODE, API_URL } from '@/config';
@@ -35,6 +35,8 @@ interface AppContextValue {
   /** The server's answer to a password: null when signed in, or the id of an SMS code challenge. */
   signInPassword: (staffId: string, password: string) => Promise<string | null>;
   capabilities: ApiCapabilities;
+  /** Who already holds these IDs, phone numbers or emails. Null when there is no connection to ask. */
+  checkMember: (lookup: MemberLookup) => Promise<MemberConflict[] | null>;
   /** 'mock' means demo data: the app is not connected to the core system. */
   apiMode: 'http' | 'mock';
   signInOtp: (challengeId: string, otp: string) => Promise<void>;
@@ -173,6 +175,18 @@ export function AppProvider({ children }: { children: ReactNode }) {
     [api],
   );
 
+  const checkMember = useCallback(
+    async (lookup: MemberLookup): Promise<MemberConflict[] | null> => {
+      if (!session || offlineRef.current) return null;
+      try {
+        return await api.checkMember(session, lookup);
+      } catch {
+        return null;
+      }
+    },
+    [api, session],
+  );
+
   const unlock = useCallback(async () => {
     const ok = await unlockWithDevice();
     if (ok) setStatus('ready');
@@ -213,6 +227,7 @@ export function AppProvider({ children }: { children: ReactNode }) {
     syncNow,
     signInPassword,
     capabilities: api.capabilities,
+    checkMember,
     apiMode: API_MODE,
     signInOtp,
     unlock,

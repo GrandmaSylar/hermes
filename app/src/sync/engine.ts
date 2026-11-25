@@ -47,6 +47,8 @@ const KV_MAX_CODE = 'members.maxCode';
 const KV_STAGE = 'pull.stage';
 const KV_ACCOUNTS_CURSOR = 'accounts.cursor';
 const KV_DECISIONS_SINCE = 'decisions.since';
+/** The member types the registration form offers, as last fetched (JSON). */
+export const KV_MEMBER_TYPES = 'registration.memberTypes';
 /** Look back this far before the last check, so a decision made while the phone was asking is not missed. */
 const DECISION_OVERLAP_MS = 10 * 60 * 1000;
 
@@ -106,7 +108,8 @@ async function run(deps: SyncDeps): Promise<SyncReport> {
     await repos.outbox.recoverInterrupted();
     await repos.registrations.recoverInterrupted();
 
-    // Only send registrations if the core system can receive them. Until then they wait safely on the phone.
+    // Registration is offered only when the server says it can take it. Until then registrations wait safely on the phone.
+    await refreshRegistration(deps);
     if (api.capabilities.registration) await pushRegistrations(deps, report, batchSize);
 
     for (;;) {
@@ -181,27 +184,42 @@ async function pullDecisions(deps: SyncDeps, report: SyncReport): Promise<void> 
   await repos.kv.set(KV_DECISIONS_SINCE, new Date(now.getTime() - DECISION_OVERLAP_MS).toISOString());
 }
 
-function toPushRegistration(r: RegistrationItem): PushRegistration {
-  return {
-    localRegistrationId: r.localRegistrationId,
-    firstName: r.firstName,
-    lastName: r.lastName,
-    gender: r.gender,
-    dateOfBirth: r.dateOfBirth,
-    phone: r.phone,
-    idType: r.idType,
-    idNumber: r.idNumber,
-    address: r.address,
-    capturedAt: r.capturedAt,
-  };
+/** The form as the server takes it. The ids on the item win, so a retry is always recognised. */
+function toPushRegistration(r: RegistrationItem & { payload: NonNullable<RegistrationItem['payload']> }): PushRegistration {
+  return { ...r.payload, localRegistrationId: r.localRegistrationId, capturedAt: r.capturedAt };
+}
+
+/** Asks the server whether registration is on, and keeps its member types for the form to use offline. A failure changes nothing. */
+async function refreshRegistration(deps: SyncDeps): Promise<void> {
+  const { repos, api, session } = deps;
+  try {
+    await api.refreshCapabilities?.(session);
+    if (api.capabilities.registration) {
+      const types = await api.memberTypes(session);
+      if (types.length > 0) await repos.kv.set(KV_MEMBER_TYPES, JSON.stringify(types));
+    }
+  } catch (error) {
+    // Offline or a server hiccup: what was known before still stands. A rejected session still ends the sync.
+    if (error instanceof ApiError && error.kind === 'AUTH') throw error;
+  }
 }
 
 /** Same delivery rules as collections: idempotent, resumable, and never lost on a network failure. */
 async function pushRegistrations(deps: SyncDeps, report: SyncReport, batchSize: number): Promise<void> {
   const { repos, api, session } = deps;
   for (;;) {
-    const batch = await repos.registrations.due(batchSize);
-    if (batch.length === 0) return;
+    const due = await repos.registrations.due(batchSize);
+    if (due.length === 0) return;
+    // A registration saved by an older version of the app has no form to send: tell the banker to redo it.
+    const old = due.filter((r) => r.payload === null);
+    for (const r of old) {
+      report.registrationsRejected += 1;
+      await repos.registrations.applyResult(r.localRegistrationId, 'REJECTED', {
+        lastError: 'Saved by an older version of the app and never sent. Register this member again.',
+      });
+    }
+    const batch = due.filter((r): r is RegistrationItem & { payload: NonNullable<RegistrationItem['payload']> } => r.payload !== null);
+    if (batch.length === 0) continue;
     const ids = batch.map((r) => r.localRegistrationId);
     await repos.registrations.markSending(ids);
 

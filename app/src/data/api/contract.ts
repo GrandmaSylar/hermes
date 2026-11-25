@@ -1,3 +1,4 @@
+import type { MemberTypeOption, RegistrationPayload } from '@/domain/registration';
 import type { DepositKind, MemberAccounts, MemberBalances, MobilizerLimits, OfficeStatus, PaymentMode, ProductType, Session } from '@/domain/types';
 
 /**
@@ -68,18 +69,25 @@ export interface PushResult {
   reason?: string;
 }
 
-/** A member registration waiting for office approval. Same idempotency rules as PushItem. */
-export interface PushRegistration {
-  localRegistrationId: string;
-  firstName: string;
-  lastName: string;
-  gender: 'F' | 'M';
-  dateOfBirth: string;
-  phone: string;
-  idType: string;
-  idNumber: string;
-  address: string;
-  capturedAt: string;
+/** A member registration waiting for office approval: the whole form, as the server takes it. Same idempotency rules as PushItem. */
+export type PushRegistration = RegistrationPayload;
+
+/** Another member who already holds an ID number, phone number or email address being registered. */
+export interface MemberConflict {
+  /** "Ghana Card", "Voter ID", "NHIS card", "Passport", "Phone" or "Email". */
+  label: string;
+  value: string;
+  memberCode: string;
+  memberName: string;
+}
+
+export interface MemberLookup {
+  nationalId?: string;
+  voterIdNo?: string;
+  nhisNo?: string;
+  passportNo?: string;
+  phone?: string;
+  email?: string;
 }
 
 export interface RegistrationResult {
@@ -150,6 +158,12 @@ export interface ApiClient {
   pullSavingsAccounts(session: Session, cursor: string | null): Promise<SavingsAccountPage>;
   pushTransactions(session: Session, items: PushItem[]): Promise<PushResult[]>;
   pushRegistrations(session: Session, items: PushRegistration[]): Promise<RegistrationResult[]>;
+  /** The member types the registration form offers. */
+  memberTypes(session: Session): Promise<MemberTypeOption[]>;
+  /** Who already holds these IDs, phone numbers or email addresses. Needs a connection. */
+  checkMember(session: Session, lookup: MemberLookup): Promise<MemberConflict[]>;
+  /** Asks the server what it can do today (for example, whether registration is switched on). */
+  refreshCapabilities?(session: Session): Promise<void>;
   /** The office's decisions on collections changed since the given time (or the latest ones if null). */
   pullDecisions(session: Session, since: string | null): Promise<OfficeDecision[]>;
   limits(session: Session): Promise<MobilizerLimits>;

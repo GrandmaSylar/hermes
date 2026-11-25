@@ -88,7 +88,7 @@ export default function SyncTab() {
                   </Text>
                   <View style={{ height: 8 }} />
                   <StatusPill status={r.status} />
-                  {r.serverId ? <Text style={{ color: colors.muted, fontSize: 12, marginTop: 6 }}>Draft reference {r.serverId}</Text> : null}
+                  {r.serverId ? <Text style={{ color: colors.muted, fontSize: 12, marginTop: 6 }}>Member number {r.serverId} (pending approval)</Text> : null}
                   {r.lastError ? <Text style={{ color: colors.danger, marginTop: 6 }}>{r.lastError}</Text> : null}
                 </Card>
               ))}

@@ -201,7 +201,11 @@ class MemoryRegistrations implements RegistrationRepo {
     return [...this.rows.values()].filter((r) => r.status === 'PENDING' || r.status === 'SENDING').length;
   }
   async hasIdNumber(idNumber: string) {
-    return [...this.rows.values()].some((r) => r.idNumber === idNumber && r.status !== 'REJECTED');
+    return [...this.rows.values()].some((r) => {
+      if (r.status === 'REJECTED') return false;
+      const own = r.payload ? [r.payload.nationalId, r.payload.voterIdNo, r.payload.nhisNo, r.payload.passportNo] : [];
+      return r.idNumber === idNumber || own.includes(idNumber);
+    });
   }
   async forDay(day: string) {
     return [...this.rows.values()].filter((r) => r.capturedAt.slice(0, 10) === day);
