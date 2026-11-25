@@ -3,9 +3,9 @@ import { HttpApi, mapMember, mapMemberStatus, messageFrom, twoDecimals } from '.
 import type { Session } from '@/domain/types';
 
 /**
- * A fake core banking server. Each route is a function from the request to a
- * status and body, and every request is recorded so tests can check exactly
- * what the app sent.
+ * A fake field server. Each route is a function from the request to a status
+ * and body, and every request is recorded so tests can check exactly what the
+ * app sent.
  */
 interface Recorded {
   method: string;
@@ -18,7 +18,7 @@ type Route = (req: Recorded) => { status: number; body?: unknown } | Promise<{ s
 function fakeServer(routes: Record<string, Route>) {
   const calls: Recorded[] = [];
   const fetchImpl = (async (url: string, init: RequestInit) => {
-    const path = url.replace('https://core.test', '');
+    const path = url.replace('https://field.test', '');
     const req: Recorded = {
       method: init.method ?? 'GET',
       path,
@@ -35,24 +35,23 @@ function fakeServer(routes: Record<string, Route>) {
   return { fetchImpl, calls };
 }
 
-const OFFICER_ID = '11111111-1111-4111-8111-111111111111';
 const DEVICE = 'device-abcdef-1';
 
-const officerList: Route = () => ({
+const loginOk: Route = () => ({
   status: 200,
-  body: { items: [{ officerId: OFFICER_ID, staffId: 'FO001', displayName: 'Field Officer One', branchCode: '001', status: 'ACTIVE', cashLimit: '20000.00' }] },
+  body: {
+    accessToken: 'access-1',
+    refreshToken: 'refresh-1',
+    expiresInSeconds: 1800,
+    officer: { id: '1006', staffId: 'mabel', fullName: 'Mabel Asare', branchCode: '100' },
+    limits: { maxSingleAmount: '5000.00', maxUnsyncedAmount: '20000.00', maxUnsyncedItems: 150 },
+  },
 });
-const deviceList = (device: Record<string, unknown> | null): Route => () => ({
-  status: 200,
-  body: { items: device ? [device] : [] },
-});
-const okDevice = { deviceId: DEVICE, status: 'ACTIVE', trusted: true };
-const loginOk: Route = () => ({ status: 200, body: { accessToken: 'access-1', refreshToken: 'refresh-1', expiresIn: 900 } });
 
 const session: Session = {
-  officerId: OFFICER_ID,
-  officerName: 'Field Officer One',
-  branchCode: '001',
+  officerId: '1006',
+  officerName: 'Mabel Asare',
+  branchCode: '100',
   deviceId: DEVICE,
   accessToken: 'access-1',
   refreshToken: 'refresh-1',
@@ -60,7 +59,7 @@ const session: Session = {
 };
 
 const deposit = {
-  localTransactionId: 'local-1',
+  localTransactionId: 'local-0001',
   memberCode: '100001',
   productType: 'SAVINGS_DEPOSIT' as const,
   amount: '40.00',
@@ -72,148 +71,142 @@ const deposit = {
 const make = (routes: Record<string, Route>) => {
   const server = fakeServer(routes);
   const tokens: Array<{ accessToken: string; refreshToken: string }> = [];
-  const api = new HttpApi({ baseUrl: 'https://core.test/', fetchImpl: server.fetchImpl, onTokens: (t) => tokens.push(t) });
+  const api = new HttpApi({ baseUrl: 'https://field.test/', fetchImpl: server.fetchImpl, onTokens: (t) => tokens.push(t) });
   return { api, calls: server.calls, tokens };
 };
 
 describe('sign-in', () => {
-  test('signs in with the staff account, finds the banker record, and checks the phone', async () => {
-    const { api, calls } = make({
-      'POST /auth/login': loginOk,
-      'GET /mobile-banking/bankers': officerList,
-      'GET /mobile-banking/devices': deviceList(okDevice),
-    });
-    const result = await api.login(' fo001 ', 'Secret123', DEVICE);
+  test('signs in with staff id and PIN and takes the banker and limits from the answer', async () => {
+    const { api, calls } = make({ 'POST /v1/auth/login': loginOk });
+    const result = await api.login(' mabel ', '1234', DEVICE);
     expect(result.kind).toBe('SIGNED_IN');
     if (result.kind !== 'SIGNED_IN') return;
-    expect(result.session).toMatchObject({ officerId: OFFICER_ID, officerName: 'Field Officer One', branchCode: '001', deviceId: DEVICE });
-    // The officer's cash limit becomes the ceiling on unsynced cash.
-    expect(result.session.limits.maxUnsyncedAmount).toBe('20000.00');
-    expect(calls[0].body).toEqual({ username: 'fo001', password: 'Secret123' });
-    expect(calls[1].headers.authorization).toBe('Bearer access-1');
-  });
-
-  test('a wrong password says so plainly', async () => {
-    const { api } = make({ 'POST /auth/login': () => ({ status: 401, body: { message: 'Invalid credentials' } }) });
-    await expect(api.login('FO001', 'wrong-pass', DEVICE)).rejects.toMatchObject({ kind: 'AUTH', message: 'Staff ID or password is incorrect.' });
-  });
-
-  test('a staff user who is not a mobile banker is told to ask the supervisor', async () => {
-    const { api } = make({
-      'POST /auth/login': loginOk,
-      'GET /mobile-banking/bankers': () => ({ status: 200, body: { items: [] } }),
+    expect(result.session).toMatchObject({
+      officerId: '1006',
+      officerName: 'Mabel Asare',
+      branchCode: '100',
+      deviceId: DEVICE,
+      accessToken: 'access-1',
+      refreshToken: 'refresh-1',
     });
-    await expect(api.login('FO001', 'Secret123', DEVICE)).rejects.toThrow(/not set up as a mobile banker/);
+    expect(result.session.limits).toEqual({ maxUnsyncedItems: 150, maxUnsyncedAmount: '20000.00', maxSingleAmount: '5000.00' });
+    expect(calls).toHaveLength(1);
+    expect(calls[0].body).toEqual({ username: 'mabel', pin: '1234', deviceId: DEVICE });
   });
 
-  test('an unregistered phone is told its id so the supervisor can register it', async () => {
+  test('missing limits fall back to safe defaults', async () => {
     const { api } = make({
-      'POST /auth/login': loginOk,
-      'GET /mobile-banking/bankers': officerList,
-      'GET /mobile-banking/devices': deviceList(null),
+      'POST /v1/auth/login': () => ({ status: 200, body: { accessToken: 'a', refreshToken: 'r', officer: { id: '1', fullName: 'X', branchCode: '100' } } }),
     });
-    await expect(api.login('FO001', 'Secret123', DEVICE)).rejects.toThrow(new RegExp(`supervisor: ${DEVICE}`));
+    const result = await api.login('x', '1', DEVICE);
+    if (result.kind !== 'SIGNED_IN') throw new Error('expected sign-in');
+    expect(result.session.limits).toEqual({ maxUnsyncedItems: 200, maxUnsyncedAmount: '50000.00', maxSingleAmount: '5000.00' });
   });
 
-  test('a registered phone that is not trusted yet cannot sign in', async () => {
+  test('a wrong PIN says so plainly', async () => {
+    const { api } = make({ 'POST /v1/auth/login': () => ({ status: 401, body: { message: 'Invalid credentials or account disabled.' } }) });
+    await expect(api.login('mabel', '0000', DEVICE)).rejects.toMatchObject({ kind: 'AUTH', message: 'Staff ID or PIN is incorrect.' });
+  });
+
+  test('a lockout shows the server\'s own wording and is not a sign-out', async () => {
+    const { api } = make({ 'POST /v1/auth/login': () => ({ status: 429, body: { message: 'Too many failed attempts. Try again in 12 minute(s).' } }) });
+    await expect(api.login('mabel', '0000', DEVICE)).rejects.toMatchObject({ kind: 'SERVER', message: expect.stringMatching(/Try again in 12/) });
+  });
+
+  test('a banker with no branch is told to contact an administrator', async () => {
+    const { api } = make({ 'POST /v1/auth/login': () => ({ status: 403, body: { message: 'This account has no branch. Contact an administrator.' } }) });
+    await expect(api.login('mabel', '1234', DEVICE)).rejects.toThrow(/no branch/);
+  });
+
+  test('empty input is reported as a prompt, not as a bad PIN', async () => {
+    const { api } = make({ 'POST /v1/auth/login': () => ({ status: 400, body: { message: 'Enter your staff ID, PIN and device id.' } }) });
+    await expect(api.login('', '', DEVICE)).rejects.toMatchObject({ kind: 'AUTH', message: 'Enter your staff ID and PIN.' });
+  });
+
+  test('an answer without a session is a server problem', async () => {
+    const { api } = make({ 'POST /v1/auth/login': () => ({ status: 200, body: {} }) });
+    await expect(api.login('mabel', '1234', DEVICE)).rejects.toMatchObject({ kind: 'SERVER' });
+  });
+
+  test('offline is a network error', async () => {
     const { api } = make({
-      'POST /auth/login': loginOk,
-      'GET /mobile-banking/bankers': officerList,
-      'GET /mobile-banking/devices': deviceList({ ...okDevice, trusted: false }),
+      'POST /v1/auth/login': () => {
+        throw new TypeError('Network request failed');
+      },
     });
-    await expect(api.login('FO001', 'Secret123', DEVICE)).rejects.toThrow(/not yet approved as trusted/);
+    await expect(api.login('mabel', '1234', DEVICE)).rejects.toMatchObject({ kind: 'NETWORK' });
   });
 
-  test('the exact staff id must match, not just a search hit', async () => {
-    const { api } = make({
-      'POST /auth/login': loginOk,
-      'GET /mobile-banking/bankers': () => ({ status: 200, body: { items: [{ officerId: 'x', staffId: 'FO0011', status: 'ACTIVE' }] } }),
-    });
-    await expect(api.login('FO001', 'Secret123', DEVICE)).rejects.toThrow(/not set up as a mobile banker/);
-  });
-
-  test('this server has no SMS code step', () => {
-    expect(make({}).api.capabilities.otp).toBe(false);
+  test('this server has no SMS code step, and only savings deposits', () => {
+    const { api } = make({});
+    expect(api.capabilities).toEqual({ otp: false, registration: false, shareContribution: false, loanRepayment: false });
   });
 });
 
-describe('reading members and accounts', () => {
-  test('maps the core member list and its cursor', async () => {
+describe('reading members', () => {
+  test('maps members with their savings account and balance, and the cursor', async () => {
     const { api, calls } = make({
-      'GET /customers': () => ({
+      'GET /v1/members': () => ({
         status: 200,
         body: {
           items: [
-            { code: '1001', fullName: 'Ama Mensah', phone: '0241234567', status: 'ACT', branchCode: '001' },
-            { code: '1002', fullName: '  Kofi Owusu ', phone: null, status: 'PND', branchCode: '001' },
-            { code: '1003', firstName: 'Esi', lastName: 'Addo', status: 'SUS', branchCode: '001' },
+            { code: '1001', fullName: 'Ama Mensah', phone: '0241234567', status: 'ACTIVE', savingsAccountId: 500001, savingsBalance: '1234.5' },
+            { code: '1002', fullName: '  Kofi Owusu ', phone: null, status: 'PENDING', savingsAccountId: null, savingsBalance: null },
+            { code: '1003', fullName: 'Esi Addo', phone: null, status: 'INACTIVE', savingsAccountId: 500003, savingsBalance: '0.00' },
           ],
           nextCursor: '1003',
         },
       }),
     });
     const page = await api.pullMembers(session, '1000');
-    expect(calls[0].path).toBe('/customers?limit=100&cursor=1000');
+    expect(calls[0].path).toBe('/v1/members?limit=200&cursor=1000');
+    expect(calls[0].headers.authorization).toBe('Bearer access-1');
     expect(page.nextCursor).toBe('1003');
-    expect(page.items.map((m) => [m.memberCode, m.name, m.status, m.phone])).toEqual([
-      ['1001', 'Ama Mensah', 'ACTIVE', '0241234567'],
-      ['1002', 'Kofi Owusu', 'PENDING_APPROVAL', ''],
-      ['1003', 'Esi Addo', 'INACTIVE', ''],
+    expect(page.items.map((m) => [m.memberCode, m.name, m.status, m.phone, m.savingsAccountId, m.balances.savings])).toEqual([
+      ['1001', 'Ama Mensah', 'ACTIVE', '0241234567', 500001, '1234.50'],
+      ['1002', 'Kofi Owusu', 'PENDING_APPROVAL', '', null, '0.00'],
+      ['1003', 'Esi Addo', 'INACTIVE', '', 500003, '0.00'],
     ]);
-    // The core does not give shares or loan balances to the field channel yet.
-    expect(page.items[0].balances).toEqual({ savings: '0.00', shares: null, loan: null });
+    // Members take the signed-in banker's branch, and shares and loan are not offered.
+    expect(page.items[0].branchCode).toBe('100');
+    expect(page.items[0].balances).toMatchObject({ shares: null, loan: null });
   });
 
   test('the last page has no cursor', async () => {
-    const { api } = make({ 'GET /customers': () => ({ status: 200, body: { items: [] } }) });
+    const { api } = make({ 'GET /v1/members': () => ({ status: 200, body: { items: [], nextCursor: null } }) });
     expect((await api.pullMembers(session, null)).nextCursor).toBeNull();
   });
 
-  test('savings accounts give the account id and an exact two-decimal balance', async () => {
-    const { api, calls } = make({
-      'GET /savings/accounts': () => ({
-        status: 200,
-        body: {
-          items: [
-            { id: 500001, customerCode: '1001', currentBalance: '1234.5000', accountNumber: 'S1' },
-            { id: 500002, customerCode: '1002', currentBalance: '-20.10', accountNumber: 'S2' },
-            { id: 'bad', customerCode: '1003', currentBalance: '5' },
-          ],
-          nextCursor: 'S2',
-        },
-      }),
-    });
-    const page = await api.pullSavingsAccounts(session, null);
-    expect(calls[0].path).toBe('/savings/accounts?limit=100&status=ACTIVE');
-    expect(page.items).toEqual([
-      { memberCode: '1001', accountId: 500001, balance: '1234.50' },
-      { memberCode: '1002', accountId: 500002, balance: '-20.10' },
-    ]);
-    expect(page.nextCursor).toBe('S2');
+  test('there is no separate accounts pull: the server sends accounts with the members', async () => {
+    const { api, calls } = make({});
+    expect(await api.pullSavingsAccounts()).toEqual({ items: [], nextCursor: null });
+    expect(calls).toHaveLength(0);
   });
 });
 
 describe('sending deposits', () => {
-  const accepted: Route = () => ({ status: 201, body: { transactionId: 'T-1', state: 'RECEIVED' } });
+  const accepted: Route = () => ({ status: 201, body: { status: 'ACCEPTED', localTransactionId: 'local-0001', serverId: '898361' } });
 
-  test('sends the request the core expects, with an idempotency key', async () => {
-    const { api, calls } = make({ 'POST /mobile-banking/transactions': accepted });
+  test('sends exactly what the server needs', async () => {
+    const { api, calls } = make({ 'POST /v1/deposits': accepted });
     const [result] = await api.pushTransactions(session, [deposit]);
-    expect(result).toEqual({ localTransactionId: 'local-1', status: 'ACCEPTED', serverId: 'T-1' });
-    expect(calls[0].headers['idempotency-key']).toBe(`${DEVICE}:local-1`);
-    expect(calls[0].body).toMatchObject({
-      officerId: OFFICER_ID,
-      deviceId: DEVICE,
-      localTransactionId: 'local-1',
+    expect(result).toEqual({ localTransactionId: 'local-0001', status: 'ACCEPTED', serverId: '898361' });
+    expect(calls[0].body).toEqual({
+      localTransactionId: 'local-0001',
       memberCode: '100001',
       accountId: 500001,
-      transactionType: 'DEPOSIT',
       amount: '40.00',
-      currency: 'GHS',
+      collectedAt: '2026-11-18T08:00:00.000Z',
     });
   });
 
-  test('only deposits are sent; other collections are held back by the app, and refused here as a safeguard', async () => {
+  test('a repeat the server already has comes back as a duplicate, not an error', async () => {
+    const { api } = make({ 'POST /v1/deposits': () => ({ status: 200, body: { status: 'DUPLICATE', serverId: '898361' } }) });
+    const [result] = await api.pushTransactions(session, [deposit]);
+    expect(result).toEqual({ localTransactionId: 'local-0001', status: 'DUPLICATE', serverId: '898361' });
+  });
+
+  test('only savings deposits with an account are sent', async () => {
     const { api, calls } = make({});
     const [share, noAccount] = await api.pushTransactions(session, [
       { ...deposit, localTransactionId: 'a', productType: 'SHARE_CONTRIBUTION' },
@@ -224,46 +217,44 @@ describe('sending deposits', () => {
     expect(calls).toHaveLength(0);
   });
 
-  test('a business refusal is shown with the core system\'s own words', async () => {
+  test('a refusal carries the server\'s reason', async () => {
     const { api } = make({
-      'POST /mobile-banking/transactions': () => ({ status: 400, body: { message: 'The savings account must be active and belong to the selected member in your branch' } }),
+      'POST /v1/deposits': () => ({ status: 422, body: { status: 'REJECTED', reason: 'This member is not in your branch.' } }),
     });
     const [result] = await api.pushTransactions(session, [deposit]);
-    expect(result).toMatchObject({ status: 'REJECTED', reason: expect.stringMatching(/savings account must be active/) });
-  });
-
-  test('a validation list is joined into one readable message', async () => {
-    const { api } = make({
-      'POST /mobile-banking/transactions': () => ({ status: 400, body: { message: ['amount must match a regular expression', 'collectedAt must be a valid ISO 8601 date string'] } }),
-    });
-    const [result] = await api.pushTransactions(session, [deposit]);
-    expect(result.reason).toMatch(/amount must match.*collectedAt must be/);
+    expect(result).toMatchObject({ status: 'REJECTED', reason: 'This member is not in your branch.' });
   });
 
   test('the same id with different details is a conflict, not an overwrite', async () => {
     const { api } = make({
-      'POST /mobile-banking/transactions': () => ({ status: 409, body: { message: 'The device local transaction id is already associated with a different request' } }),
+      'POST /v1/deposits': () => ({ status: 409, body: { status: 'CONFLICT', reason: 'This transaction id was already used for a different deposit.' } }),
     });
     const [result] = await api.pushTransactions(session, [deposit]);
-    expect(result.status).toBe('CONFLICT');
+    expect(result).toMatchObject({ status: 'CONFLICT', reason: expect.stringMatching(/already used/) });
+  });
+
+  test('a malformed request is shown as a refusal with the server\'s message', async () => {
+    const { api } = make({ 'POST /v1/deposits': () => ({ status: 400, body: { message: 'amount must have at most two decimals' } }) });
+    const [result] = await api.pushTransactions(session, [deposit]);
+    expect(result).toMatchObject({ status: 'REJECTED', reason: expect.stringMatching(/two decimals/) });
   });
 
   test('losing the connection part-way returns what was answered and leaves the rest waiting', async () => {
     let n = 0;
     const { api } = make({
-      'POST /mobile-banking/transactions': () => {
+      'POST /v1/deposits': () => {
         n += 1;
         if (n === 2) throw new TypeError('Network request failed');
-        return { status: 201, body: { transactionId: `T-${n}` } };
+        return { status: 201, body: { status: 'ACCEPTED', serverId: `S-${n}` } };
       },
     });
-    const results = await api.pushTransactions(session, [deposit, { ...deposit, localTransactionId: 'local-2' }, { ...deposit, localTransactionId: 'local-3' }]);
-    expect(results.map((r) => r.localTransactionId)).toEqual(['local-1']);
+    const results = await api.pushTransactions(session, [deposit, { ...deposit, localTransactionId: 'local-0002' }, { ...deposit, localTransactionId: 'local-0003' }]);
+    expect(results.map((r) => r.localTransactionId)).toEqual(['local-0001']);
   });
 
   test('losing the connection on the first item is a network error', async () => {
     const { api } = make({
-      'POST /mobile-banking/transactions': () => {
+      'POST /v1/deposits': () => {
         throw new TypeError('Network request failed');
       },
     });
@@ -271,15 +262,8 @@ describe('sending deposits', () => {
   });
 
   test('server trouble is a server error so the item stays waiting and is retried', async () => {
-    const { api } = make({ 'POST /mobile-banking/transactions': () => ({ status: 503, body: { message: 'boom' } }) });
+    const { api } = make({ 'POST /v1/deposits': () => ({ status: 500, body: { message: 'Something went wrong. Try again.' } }) });
     await expect(api.pushTransactions(session, [deposit])).rejects.toMatchObject({ kind: 'SERVER' });
-  });
-
-  test('a role the core refuses is shown, not treated as a sign-out', async () => {
-    const { api } = make({
-      'POST /mobile-banking/transactions': () => ({ status: 403, body: { message: 'Submitting a field transaction requires a field-operations role' } }),
-    });
-    await expect(api.pushTransactions(session, [deposit])).rejects.toMatchObject({ kind: 'SERVER', message: expect.stringMatching(/field-operations/) });
   });
 });
 
@@ -287,19 +271,19 @@ describe('session renewal', () => {
   test('an expired session is renewed once and the request repeated', async () => {
     let first = true;
     const { api, calls, tokens } = make({
-      'POST /mobile-banking/transactions': (req) => {
+      'POST /v1/deposits': (req) => {
         if (first) {
           first = false;
-          return { status: 401, body: { message: 'Unauthorized' } };
+          return { status: 401, body: { message: 'Sign in again.' } };
         }
         expect(req.headers.authorization).toBe('Bearer access-2');
-        return { status: 201, body: { transactionId: 'T-9' } };
+        return { status: 201, body: { status: 'ACCEPTED', serverId: 'S-9' } };
       },
-      'POST /auth/refresh': () => ({ status: 200, body: { accessToken: 'access-2', refreshToken: 'refresh-2', expiresIn: 900 } }),
+      'POST /v1/auth/refresh': () => ({ status: 200, body: { accessToken: 'access-2', refreshToken: 'refresh-2' } }),
     });
     const [result] = await api.pushTransactions(session, [deposit]);
     expect(result.status).toBe('ACCEPTED');
-    expect(calls.map((c) => c.path)).toEqual(['/mobile-banking/transactions', '/auth/refresh', '/mobile-banking/transactions']);
+    expect(calls.map((c) => c.path)).toEqual(['/v1/deposits', '/v1/auth/refresh', '/v1/deposits']);
     expect(calls[1].body).toEqual({ refreshToken: 'refresh-1' });
     // The new tokens are handed back so the app can store them.
     expect(tokens).toEqual([{ accessToken: 'access-2', refreshToken: 'refresh-2' }]);
@@ -309,14 +293,14 @@ describe('session renewal', () => {
     let refreshes = 0;
     let stale = 2;
     const { api } = make({
-      'GET /customers': () => {
+      'GET /v1/members': () => {
         if (stale > 0) {
           stale -= 1;
           return { status: 401 };
         }
         return { status: 200, body: { items: [] } };
       },
-      'POST /auth/refresh': async () => {
+      'POST /v1/auth/refresh': async () => {
         refreshes += 1;
         return { status: 200, body: { accessToken: 'access-2', refreshToken: 'refresh-2' } };
       },
@@ -325,35 +309,32 @@ describe('session renewal', () => {
     expect(refreshes).toBe(1);
   });
 
-  test('when the refresh token is also refused, the user must sign in again', async () => {
+  test('a banker disabled in the core system must sign in again', async () => {
     const { api } = make({
-      'GET /customers': () => ({ status: 401 }),
-      'POST /auth/refresh': () => ({ status: 401, body: { message: 'Invalid refresh token' } }),
+      'GET /v1/members': () => ({ status: 401, body: { message: 'Account disabled or changed. Sign in again.' } }),
+      'POST /v1/auth/refresh': () => ({ status: 401, body: { message: 'Account disabled.' } }),
     });
     await expect(api.pullMembers(session, null)).rejects.toMatchObject({ kind: 'AUTH' });
   });
 
   test('being offline while renewing is a network problem, not a sign-out', async () => {
-    let calls = 0;
     const { api } = make({
-      'GET /customers': () => ({ status: 401 }),
-      'POST /auth/refresh': () => {
-        calls += 1;
+      'GET /v1/members': () => ({ status: 401 }),
+      'POST /v1/auth/refresh': () => {
         throw new TypeError('Network request failed');
       },
     });
     await expect(api.pullMembers(session, null)).rejects.toBeInstanceOf(ApiError);
     await expect(api.pullMembers(session, null)).rejects.toMatchObject({ kind: 'NETWORK' });
-    expect(calls).toBeGreaterThan(0);
   });
 });
 
 describe('helpers', () => {
-  test('member status codes', () => {
-    expect(mapMemberStatus('ACT')).toBe('ACTIVE');
+  test('member status words from the server', () => {
+    expect(mapMemberStatus('ACTIVE')).toBe('ACTIVE');
     expect(mapMemberStatus('active')).toBe('ACTIVE');
-    expect(mapMemberStatus('PND')).toBe('PENDING_APPROVAL');
-    for (const code of ['INA', 'DOR', 'SUS', 'CLO', '']) expect(mapMemberStatus(code)).toBe('INACTIVE');
+    expect(mapMemberStatus('PENDING')).toBe('PENDING_APPROVAL');
+    for (const word of ['INACTIVE', 'DORMANT', '']) expect(mapMemberStatus(word)).toBe('INACTIVE');
   });
   test('twoDecimals never uses floating point', () => {
     expect(twoDecimals('0.1')).toBe('0.10');
@@ -361,12 +342,16 @@ describe('helpers', () => {
     expect(twoDecimals('abc')).toBeNull();
     expect(twoDecimals(null)).toBeNull();
   });
-  test('messageFrom', () => {
+  test('messageFrom reads a message, a list of messages or a reason', () => {
     expect(messageFrom({ message: 'x' }, 'f')).toBe('x');
+    expect(messageFrom({ message: ['a', 'b'] }, 'f')).toBe('a b');
+    expect(messageFrom({ reason: 'why' }, 'f')).toBe('why');
     expect(messageFrom({}, 'f')).toBe('f');
     expect(messageFrom(null, 'f')).toBe('f');
   });
-  test('mapMember falls back to first and last name', () => {
-    expect(mapMember({ code: '1', firstName: 'A', lastName: 'B', status: 'ACT' }, 'now').name).toBe('A B');
+  test('mapMember tolerates a member with no account', () => {
+    const m = mapMember({ code: '1', fullName: 'A B', status: 'ACTIVE' }, 'now', '100');
+    expect(m.savingsAccountId).toBeNull();
+    expect(m.balances.savings).toBe('0.00');
   });
 });

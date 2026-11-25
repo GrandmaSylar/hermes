@@ -83,8 +83,8 @@ export default function Login() {
           </View>
         ) : step === 'password' ? (
           <View>
-            <Field label="Staff ID" value={staffId} onChangeText={setStaffId} autoCapitalize="characters" autoCorrect={false} />
-            <Field label="Password" value={password} onChangeText={setPassword} secureTextEntry autoCapitalize="none" />
+            <Field label="Staff ID" value={staffId} onChangeText={setStaffId} autoCapitalize={apiMode === 'http' ? 'none' : 'characters'} autoCorrect={false} />
+            <Field label={apiMode === 'http' ? 'PIN' : 'Password'} value={password} onChangeText={setPassword} secureTextEntry autoCapitalize="none" />
             <Button title="Continue" onPress={submitPassword} busy={busy} disabled={!staffId.trim() || !password} />
           </View>
         ) : (
