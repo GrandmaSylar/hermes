@@ -157,10 +157,11 @@ export class MssqlRepo implements Repo {
       return byMember;
     };
     const sets = result.recordsets as unknown as Record<string, any>[][];
-    const savings = group(sets[2]);
-    const shares = group(sets[3]);
+    // The INSERT into @page returns no recordset, so the three reads are sets 0, 1 and 2.
+    const savings = group(sets[1]);
+    const shares = group(sets[2]);
 
-    return sets[1].map((r) => ({
+    return sets[0].map((r) => ({
       code: String(r.Code),
       fullName: String(r.FullName ?? '').trim(),
       phone: r.PhoneNo ? String(r.PhoneNo).trim() : null,
