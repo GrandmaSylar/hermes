@@ -38,6 +38,24 @@ Amount greater than zero and at most the single limit; collection time not in th
 
 Each refusal is a 422 with a plain-English reason, and nothing is stored.
 
+**Older core databases.** At startup the server reads which columns exist (as seen by its own database login, so every table it uses needs the grants in `deploy/create-db-login.sql`) and builds its SQL from them. A rule whose column is missing is simply not applied, and the startup log and `GET /health` (`schema: {...}`) show which rules are on:
+
+| Rule | Needs | If missing |
+|---|---|---|
+| Savings product active | `SavingsProduct.IsActive` | not applied |
+| Savings minimum / maximum deposit | `SavingsProduct.MinimumDeposit` / `MaximumDeposit` | not applied (each separately) |
+| Savings dormant / closed | `SavingsAccount.IsDormant` / `DateClosed` | not applied |
+| Share product active | `ShareProduct.IsActive` | not applied |
+| Share minimum / maximum purchase | `ShareProduct.MinPurchaseAmount` / `MaxPurchaseAmount` | not applied |
+| Share closed / status | `ShareHolding.DateClosed` / `ShareStatus` | not applied |
+| Member active / status | `Customer.IsActive` / `StatusCode` | not applied |
+| Banker enabled | `FieldOfficer.IsActive` / `UsrEnabled` | not applied |
+| Product name | `ProductName`, else `Description`, else the product code | falls back in that order |
+| Share deposits | `ShareHolding`, `ShareProduct`, `ShareTransaction` and their key columns | `accounts.shares` is empty and a SHARES deposit is refused |
+| Pending-deposit text | `AppSettings`, `SMSHistory` (with `ReferenceNo`), `Customer.CustomerID` and a member phone column | texts stay off, one log line, never an error |
+
+The server refuses to start, with one message listing what is missing, if the basics are absent: `FieldOfficer` (id, username, password hash, branch), `Customer` (code, name, branch), `SavingsAccount` (id, customer, product code, number, balance, status) and the columns written to `SavingsTransaction`. Note that a table the login has no grant on is invisible to the probe and is treated as missing.
+
 ## Text message when a deposit is stored (optional, off by default)
 
 After the pending row is committed and the answer has been sent, the server can text the member: `Dear <first name>, GHS <amount> received for your <product> account, pending approval. Ref: <first 8 characters of the id>`. It reuses the core's own settings and log:

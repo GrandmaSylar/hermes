@@ -134,7 +134,8 @@ export function buildApp(deps: AppDeps): FastifyInstance {
   app.get('/health', async (_req, reply) => {
     try {
       await (repo as { ping?: () => Promise<void> }).ping?.();
-      return { status: 'ok' };
+      const schema = repo.describeSchema?.();
+      return schema ? { status: 'ok', schema } : { status: 'ok' };
     } catch {
       return fail(reply, 503, 'Database unavailable');
     }
@@ -250,6 +251,9 @@ export function buildApp(deps: AppDeps): FastifyInstance {
     }
 
     const kind = body.kind;
+    if (kind === 'SHARES' && repo.describeSchema && !repo.describeSchema().sharesEnabled) {
+      return reject('Share deposits are not available on this system.');
+    }
     const account = await repo.getAccount(kind, body.accountId);
     if (!account) return reject(`That ${NOUN[kind]} does not belong to this member.`);
     const why = ineligible(kind, account, minor, body.memberCode, officer.branchCode);

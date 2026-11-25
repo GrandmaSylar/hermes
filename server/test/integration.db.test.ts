@@ -139,6 +139,44 @@ d('against the dummy core database', () => {
     expect(ms).toBeLessThan(10_000);
   }, 60_000);
 
+  test('the schema probe matches the database (set INT_EXPECT_OLD=1 for the old-schema copy)', async () => {
+    const health = (await app.inject({ method: 'GET', url: '/health' })).json();
+    console.log('SCHEMA', JSON.stringify(health.schema));
+    const old = env.INT_EXPECT_OLD === '1';
+    expect(health.schema.savingsProductActiveRule).toBe(!old);
+    expect(health.schema.savingsMinDepositRule).toBe(!old);
+    expect(health.schema.shareProductActiveRule).toBe(!old);
+    expect(health.schema.sharesEnabled).toBe(true);
+    expect(health.schema.savingsDormantRule).toBe(true);
+  });
+
+  test('dormant and closed accounts and closed holdings are refused', async () => {
+    const page = (await app.inject({ method: 'GET', url: '/v1/members?limit=1&cursor=193', headers: { authorization: auth } })).json();
+    const m = page.items[0];
+    expect(m.code).toBe('194');
+    const acct = m.accounts.savings[1].id;
+    const holding = m.accounts.shares[0].id;
+    const run = async (tbl: string, idCol: string, id: number, set: string, undo: string, payload: object, expected: RegExp) => {
+      await q(`UPDATE ${tbl} SET ${set} WHERE ${idCol} = ${id}`);
+      try {
+        const res = await post({ amount: '1.00', collectedAt: collectedAt(), memberCode: '194', ...payload });
+        expect(res.statusCode).toBe(422);
+        expect(res.json().reason).toMatch(expected);
+      } finally {
+        await q(`UPDATE ${tbl} SET ${undo} WHERE ${idCol} = ${id}`);
+      }
+    };
+    await run('SavingsAccount', 'SavingsAccountID', acct, 'IsDormant = 1', 'IsDormant = 0', { localTransactionId: ids('dorm'), accountId: acct }, /dormant/);
+    await run('SavingsAccount', 'SavingsAccountID', acct, "DateClosed = '2026-01-02'", 'DateClosed = NULL', { localTransactionId: ids('clos'), accountId: acct }, /closed/);
+    await run('ShareHolding', 'ShareHoldingID', holding, "DateClosed = '2026-01-02'", 'DateClosed = NULL', { localTransactionId: ids('shcl'), kind: 'SHARES', accountId: holding }, /closed/);
+    // closed or dormant accounts also disappear from the members list while set
+    await q(`UPDATE SavingsAccount SET IsDormant = 1 WHERE SavingsAccountID = ${acct}`);
+    const during = (await app.inject({ method: 'GET', url: '/v1/members?limit=1&cursor=193', headers: { authorization: auth } })).json().items[0];
+    await q(`UPDATE SavingsAccount SET IsDormant = 0 WHERE SavingsAccountID = ${acct}`);
+    expect(during.accounts.savings.map((a: { id: number }) => a.id)).not.toContain(acct);
+    expect(await q(`SELECT COUNT(*) AS n FROM SavingsTransaction WHERE ReferenceNumber LIKE 'MOBIDEMP-${RUN}-dorm%' OR ReferenceNumber LIKE 'MOBIDEMP-${RUN}-clos%'`)).toEqual([{ n: 0 }]);
+  });
+
   test('a savings deposit is stored pending with the prefixed reference, once', async () => {
     const payload = { localTransactionId: ids('sav1'), memberCode: '209', accountId: 182495, amount: '12.34', collectedAt: collectedAt() };
     const a = await post(payload);

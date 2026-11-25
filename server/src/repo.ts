@@ -127,6 +127,8 @@ export interface SmsLogEntry {
 }
 
 export interface Repo {
+  /** Which optional rules and features this database supports (shown under GET /health). */
+  describeSchema?(): Record<string, boolean>;
   findOfficer(username: string): Promise<Officer | null>;
   getOfficer(id: string): Promise<Officer | null>;
   listMembers(branchCode: string, afterCode: number, limit: number): Promise<MemberRow[]>;

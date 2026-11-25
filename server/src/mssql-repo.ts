@@ -18,6 +18,7 @@ import type {
 } from './repo';
 import type { Config } from './config';
 import { smsPhone } from './sms';
+import { buildSchema, describe as describeSchema, has, pick, product, TABLES, type Schema } from './schema';
 
 /** The tag the core system filters on; the same value the existing channel writes. */
 const BANKING_TYPE = 'MOBILE-BANKING';
@@ -34,9 +35,31 @@ export class MssqlRepo implements Repo {
   private constructor(
     private readonly pool: sql.ConnectionPool,
     private readonly hasRejections: boolean,
+    private readonly schema: Schema,
   ) {}
 
-  static async connect(db: Config['db']): Promise<MssqlRepo> {
+  describeSchema(): Record<string, boolean> {
+    return describeSchema(this.schema);
+  }
+
+  /** Reads which columns exist (visible to this login) and builds the schema. Throws if the minimum is missing. */
+  static async probeSchema(pool: sql.ConnectionPool, log: (m: string) => void = console.log) {
+    const names = TABLES.map((t) => `N'${t}'`).join(',');
+    const res = await pool
+      .request()
+      .query(
+        `SELECT t.name AS tbl, c.name AS col FROM sys.columns c JOIN sys.tables t ON t.object_id = c.object_id
+         WHERE SCHEMA_NAME(t.schema_id) = N'dbo' AND t.name IN (${names})`,
+      );
+    const built = buildSchema(res.recordset.map((r) => ({ table: String(r.tbl), column: String(r.col) })));
+    const on = Object.entries(describeSchema(built.schema)).map(([k, v]) => `${k}=${v ? 'on' : 'off'}`);
+    log(`Core schema probed. ${on.join(' ')}`);
+    if (!built.schema.shares) log(`Share deposits are off; missing: ${built.sharesMissing.join(', ')}`);
+    if (!built.schema.sms) log(`Pending-deposit text messages are off; missing: ${built.smsMissing.join(', ')}`);
+    return built.schema;
+  }
+
+  static async connect(db: Config['db'], log: (m: string) => void = console.log): Promise<MssqlRepo> {
     const pool = await new sql.ConnectionPool({
       server: db.server,
       port: db.port,
@@ -48,8 +71,14 @@ export class MssqlRepo implements Repo {
       requestTimeout: 20_000,
       connectionTimeout: 15_000,
     }).connect();
-    const probe = await pool.request().query(`SELECT OBJECT_ID(N'dbo.MobileTransactionRejection', N'U') AS id`);
-    return new MssqlRepo(pool, probe.recordset[0]?.id != null);
+    try {
+      const schema = await MssqlRepo.probeSchema(pool, log);
+      const probe = await pool.request().query(`SELECT OBJECT_ID(N'dbo.MobileTransactionRejection', N'U') AS id`);
+      return new MssqlRepo(pool, probe.recordset[0]?.id != null, schema);
+    } catch (error) {
+      await pool.close();
+      throw error;
+    }
   }
 
   async close(): Promise<void> {
@@ -71,14 +100,31 @@ export class MssqlRepo implements Repo {
     };
   }
 
+  /** The banker columns, with stand-ins for the optional ones an older database lacks. */
+  private officerSelect(): string {
+    const s = this.schema;
+    const col = (c: string, fallback: string) => (has(s, `FieldOfficer.${c}`) ? c : `${fallback} AS ${c}`);
+    return [
+      'FieldOfficerID',
+      col('EmployeeID', 'Username'),
+      'Username',
+      col('FullName', 'Username'),
+      'BranchCode',
+      'PasswordHash',
+      col('IsActive', 'CAST(1 AS bit)'),
+      col('UsrEnabled', 'CAST(1 AS bit)'),
+    ].join(', ');
+  }
+
   async findOfficer(username: string): Promise<Officer | null> {
+    const byStaff = has(this.schema, 'FieldOfficer.EmployeeID');
     const result = await this.pool
       .request()
       .input('u', sql.VarChar(100), username)
       .query(
-        `SELECT TOP 1 FieldOfficerID, EmployeeID, Username, FullName, BranchCode, PasswordHash, IsActive, UsrEnabled
-         FROM dbo.FieldOfficer WHERE EmployeeID = @u OR Username = @u
-         ORDER BY CASE WHEN EmployeeID = @u THEN 0 ELSE 1 END, FieldOfficerID`,
+        `SELECT TOP 1 ${this.officerSelect()}
+         FROM dbo.FieldOfficer WHERE ${byStaff ? 'EmployeeID = @u OR ' : ''}Username = @u
+         ORDER BY ${byStaff ? 'CASE WHEN EmployeeID = @u THEN 0 ELSE 1 END, ' : ''}FieldOfficerID`,
       );
     return result.recordset[0] ? this.officerFrom(result.recordset[0]) : null;
   }
@@ -90,7 +136,7 @@ export class MssqlRepo implements Repo {
       .request()
       .input('id', sql.Int, n)
       .query(
-        `SELECT TOP 1 FieldOfficerID, EmployeeID, Username, FullName, BranchCode, PasswordHash, IsActive, UsrEnabled
+        `SELECT TOP 1 ${this.officerSelect()}
          FROM dbo.FieldOfficer WHERE FieldOfficerID = @id`,
       );
     return result.recordset[0] ? this.officerFrom(result.recordset[0]) : null;
@@ -99,6 +145,27 @@ export class MssqlRepo implements Repo {
   async listMembers(branchCode: string, afterCode: number, limit: number): Promise<MemberRow[]> {
     // One round trip, three set-based reads: the page of members, then every eligible savings
     // account and share holding of exactly those members.
+    const s = this.schema;
+    const sp = product(s, 'SAVINGS', 'a');
+    const hp = product(s, 'SHARES', 'h');
+    const savingsList = `SELECT a.CustomerCode, a.SavingsAccountID AS Id, a.AccountNumber AS Number, a.SavingsProductCode AS ProductCode,
+                ${sp.name} AS ProductName, a.CurrentBalance AS Balance
+         FROM @page p
+         JOIN dbo.SavingsAccount a ON a.CustomerCode = p.Code
+         ${sp.join}
+         WHERE a.AccountStatus = 'ACTIVE' ${has(s, 'SavingsAccount.DateClosed') ? 'AND a.DateClosed IS NULL' : ''}
+           ${has(s, 'SavingsAccount.IsDormant') ? 'AND a.IsDormant = 0' : ''} ${sp.activeCondition}
+         ORDER BY a.CustomerCode, ${has(s, 'SavingsAccount.DateOpened') ? 'a.DateOpened, ' : ''}a.SavingsAccountID;`;
+    const sharesList = s.shares
+      ? `SELECT h.CustomerCode, h.ShareHoldingID AS Id, h.ShareAccountNumber AS Number, h.ShareProductCode AS ProductCode,
+                ${hp.name} AS ProductName, h.PaidUpValue AS Balance
+         FROM @page p
+         JOIN dbo.ShareHolding h ON h.CustomerCode = p.Code
+         ${hp.join}
+         WHERE ${has(s, 'ShareHolding.ShareStatus') ? "h.ShareStatus = 'ACTIVE'" : '1 = 1'}
+           ${has(s, 'ShareHolding.DateClosed') ? 'AND h.DateClosed IS NULL' : ''} ${hp.activeCondition}
+         ORDER BY h.CustomerCode, ${has(s, 'ShareHolding.DateOpened') ? 'h.DateOpened, ' : ''}h.ShareHoldingID;`
+      : '';
     const result = await this.pool
       .request()
       .input('branch', sql.VarChar(10), branchCode)
@@ -111,7 +178,9 @@ export class MssqlRepo implements Repo {
            WHERE LTRIM(RTRIM(c.BranchCode)) = @branch AND c.Code > @after
            ORDER BY c.Code;
 
-         SELECT c.Code, c.FullName, c.PhoneNo, c.StatusCode, c.IsActive,
+         SELECT c.Code, c.FullName, ${pick(s, 'Customer', 'c', 'PhoneNo', 'CAST(NULL AS varchar(50))')} AS PhoneNo,
+                ${pick(s, 'Customer', 'c', 'StatusCode', "'ACT'")} AS StatusCode,
+                ${pick(s, 'Customer', 'c', 'IsActive', 'CAST(1 AS bit)')} AS IsActive,
                 sa.SavingsAccountID, sa.CurrentBalance
          FROM @page p
          JOIN dbo.Customer c ON c.Code = p.Code
@@ -123,21 +192,9 @@ export class MssqlRepo implements Repo {
          ) sa
          ORDER BY c.Code;
 
-         SELECT a.CustomerCode, a.SavingsAccountID AS Id, a.AccountNumber AS Number, a.SavingsProductCode AS ProductCode,
-                sp.ProductName, a.CurrentBalance AS Balance
-         FROM @page p
-         JOIN dbo.SavingsAccount a ON a.CustomerCode = p.Code
-         JOIN dbo.SavingsProduct sp ON sp.Code = a.SavingsProductCode
-         WHERE a.AccountStatus = 'ACTIVE' AND a.DateClosed IS NULL AND a.IsDormant = 0 AND sp.IsActive = 1
-         ORDER BY a.CustomerCode, a.DateOpened, a.SavingsAccountID;
+         ${savingsList}
 
-         SELECT h.CustomerCode, h.ShareHoldingID AS Id, h.ShareAccountNumber AS Number, h.ShareProductCode AS ProductCode,
-                sp.ProductName, h.PaidUpValue AS Balance
-         FROM @page p
-         JOIN dbo.ShareHolding h ON h.CustomerCode = p.Code
-         JOIN dbo.ShareProduct sp ON sp.Code = h.ShareProductCode
-         WHERE h.ShareStatus = 'ACTIVE' AND h.DateClosed IS NULL AND sp.IsActive = 1
-         ORDER BY h.CustomerCode, h.DateOpened, h.ShareHoldingID;`,
+         ${sharesList}`,
       );
 
     const group = (rows: Record<string, unknown>[]) => {
@@ -159,7 +216,7 @@ export class MssqlRepo implements Repo {
     const sets = result.recordsets as unknown as Record<string, any>[][];
     // The INSERT into @page returns no recordset, so the three reads are sets 0, 1 and 2.
     const savings = group(sets[1]);
-    const shares = group(sets[2]);
+    const shares = group(sets[2] ?? []);
 
     return sets[0].map((r) => ({
       code: String(r.Code),
@@ -174,27 +231,38 @@ export class MssqlRepo implements Repo {
   }
 
   async getAccount(kind: DepositKind, accountId: number): Promise<AccountInfo | null> {
+    if (kind === 'SHARES' && !this.schema.shares) return null;
+    const s = this.schema;
     const request = this.pool.request().input('id', sql.Int, accountId);
+    const customerCols = `${pick(s, 'Customer', 'c', 'IsActive', 'CAST(1 AS bit)')} AS CustomerActive,
+                    ${pick(s, 'Customer', 'c', 'StatusCode', "'ACT'")} AS CustomerStatus`;
+    const sp = product(s, 'SAVINGS', 'sa');
+    const hp = product(s, 'SHARES', 'h');
     const result =
       kind === 'SAVINGS'
         ? await request.query(
-            `SELECT TOP 1 sa.SavingsAccountID AS Id, sa.CustomerCode, sa.BranchCode, sa.AccountStatus AS Status,
-                    sa.CurrentBalance AS Balance, sa.DateClosed, sa.IsDormant, sa.SavingsProductCode AS ProductCode,
-                    sp.ProductName, sp.IsActive AS ProductActive, sp.MinimumDeposit AS MinAmount, sp.MaximumDeposit AS MaxAmount,
-                    c.IsActive AS CustomerActive, c.StatusCode AS CustomerStatus
+            `SELECT TOP 1 sa.SavingsAccountID AS Id, sa.CustomerCode, ${pick(s, 'SavingsAccount', 'sa', 'BranchCode', 'c.BranchCode')} AS BranchCode,
+                    sa.AccountStatus AS Status, sa.CurrentBalance AS Balance,
+                    ${pick(s, 'SavingsAccount', 'sa', 'DateClosed', 'CAST(NULL AS date)')} AS DateClosed,
+                    ${pick(s, 'SavingsAccount', 'sa', 'IsDormant', 'CAST(0 AS bit)')} AS IsDormant,
+                    sa.SavingsProductCode AS ProductCode,
+                    ${sp.name} AS ProductName, ${sp.active} AS ProductActive, ${sp.min} AS MinAmount, ${sp.max} AS MaxAmount,
+                    ${customerCols}
              FROM dbo.SavingsAccount sa
              JOIN dbo.Customer c ON c.Code = sa.CustomerCode
-             LEFT JOIN dbo.SavingsProduct sp ON sp.Code = sa.SavingsProductCode
+             ${sp.join}
              WHERE sa.SavingsAccountID = @id`,
           )
         : await request.query(
-            `SELECT TOP 1 h.ShareHoldingID AS Id, h.CustomerCode, h.BranchCode, h.ShareStatus AS Status,
-                    h.PaidUpValue AS Balance, h.DateClosed, CAST(0 AS bit) AS IsDormant, h.ShareProductCode AS ProductCode,
-                    p.ProductName, p.IsActive AS ProductActive, p.MinPurchaseAmount AS MinAmount, p.MaxPurchaseAmount AS MaxAmount,
-                    c.IsActive AS CustomerActive, c.StatusCode AS CustomerStatus
+            `SELECT TOP 1 h.ShareHoldingID AS Id, h.CustomerCode, ${pick(s, 'ShareHolding', 'h', 'BranchCode', 'c.BranchCode')} AS BranchCode,
+                    ${pick(s, 'ShareHolding', 'h', 'ShareStatus', "'ACTIVE'")} AS Status,
+                    h.PaidUpValue AS Balance, ${pick(s, 'ShareHolding', 'h', 'DateClosed', 'CAST(NULL AS date)')} AS DateClosed,
+                    CAST(0 AS bit) AS IsDormant, h.ShareProductCode AS ProductCode,
+                    ${hp.name} AS ProductName, ${hp.active} AS ProductActive, ${hp.min} AS MinAmount, ${hp.max} AS MaxAmount,
+                    ${customerCols}
              FROM dbo.ShareHolding h
              JOIN dbo.Customer c ON c.Code = h.CustomerCode
-             LEFT JOIN dbo.ShareProduct p ON p.Code = h.ShareProductCode
+             ${hp.join}
              WHERE h.ShareHoldingID = @id`,
           );
     const r = result.recordset[0];
@@ -247,6 +315,7 @@ export class MssqlRepo implements Repo {
         amount: decimalText(s.Credit),
       };
     }
+    if (!this.schema.shares) return null;
     const shares = await request().query(
       `SELECT TOP 1 ShareTransactionID, CustomerCode, ShareHoldingID, Credit
        FROM dbo.ShareTransaction
@@ -268,6 +337,7 @@ export class MssqlRepo implements Repo {
   }
 
   async insertDeposit(input: DepositInput): Promise<InsertOutcome> {
+    if (input.kind === 'SHARES' && !this.schema.shares) throw new Error('Share deposits are not available on this database');
     const stored = storedReference(input.reference);
     const valueDate = input.collectedAt.toISOString().slice(0, 10);
     const description = `Mobile deposit [IDEMP:idempotency_${input.reference}]`;
@@ -362,6 +432,23 @@ export class MssqlRepo implements Repo {
         ? `LEFT JOIN dbo.MobileTransactionRejection rej ON rej.SourceTable = '${table}' AND rej.SourceID = ${alias}.${idCol}`
         : '';
     const reason = this.hasRejections ? 'rej.Reason' : 'CAST(NULL AS NVARCHAR(500))';
+    const s = this.schema;
+    // CreatedAt / ApprovedAt / UpdatedAt are optional on older databases.
+    const part = (table: string, a: string, idCol: string, kind: string, first: boolean) => {
+      const t = (c: string) => has(s, `${table}.${c}`);
+      const created = t('CreatedAt') ? `${a}.CreatedAt` : t('TransactionDate') ? `CAST(${a}.TransactionDate AS datetime2)` : 'CAST(NULL AS datetime2)';
+      const decided = [t('ApprovedAt') ? `${a}.ApprovedAt` : '', t('UpdatedAt') ? `${a}.UpdatedAt` : ''].filter(Boolean);
+      const decidedExpr = decided.length ? `COALESCE(${decided.join(', ')})` : 'CAST(NULL AS datetime2)';
+      const since = ['CreatedAt', 'UpdatedAt', 'ApprovedAt'].filter(t).map((c) => `${a}.${c} >= @since`);
+      const alias = (name: string) => (first ? ` AS ${name}` : '');
+      return `SELECT '${kind}'${alias('Kind')}, ${a}.${idCol}${alias('Id')}, ${a}.ReferenceNumber, ${a}.CustomerCode, ${a}.Credit, ${a}.Status,
+                  ${created}${alias('CreatedAt')}, ${decidedExpr}${alias('DecidedAt')}, ${reason}${alias('Reason')}
+           FROM dbo.${table} ${a} ${rej(table, a, idCol)}
+           WHERE RTRIM(${a}.UserID) = @uid AND ${a}.BankingType = '${BANKING_TYPE}'
+             AND (@since IS NULL${since.map((c) => ` OR ${c}`).join('')})`;
+    };
+    const parts = [part('SavingsTransaction', 'st', 'SavingsTransactionID', 'SAVINGS', true)];
+    if (s.shares) parts.push(part('ShareTransaction', 'sh', 'ShareTransactionID', 'SHARES', false));
     const result = await this.pool
       .request()
       .input('uid', sql.Char(20), officerId)
@@ -369,17 +456,7 @@ export class MssqlRepo implements Repo {
       .input('limit', sql.Int, limit)
       .query(
         `SELECT TOP (@limit) * FROM (
-           SELECT 'SAVINGS' AS Kind, st.SavingsTransactionID AS Id, st.ReferenceNumber, st.CustomerCode, st.Credit, st.Status,
-                  st.CreatedAt, COALESCE(st.ApprovedAt, st.UpdatedAt) AS DecidedAt, ${reason} AS Reason
-           FROM dbo.SavingsTransaction st ${rej('SavingsTransaction', 'st', 'SavingsTransactionID')}
-           WHERE RTRIM(st.UserID) = @uid AND st.BankingType = '${BANKING_TYPE}'
-             AND (@since IS NULL OR st.CreatedAt >= @since OR st.UpdatedAt >= @since OR st.ApprovedAt >= @since)
-           UNION ALL
-           SELECT 'SHARES', sh.ShareTransactionID, sh.ReferenceNumber, sh.CustomerCode, sh.Credit, sh.Status,
-                  sh.CreatedAt, COALESCE(sh.ApprovedAt, sh.UpdatedAt), ${reason}
-           FROM dbo.ShareTransaction sh ${rej('ShareTransaction', 'sh', 'ShareTransactionID')}
-           WHERE RTRIM(sh.UserID) = @uid AND sh.BankingType = '${BANKING_TYPE}'
-             AND (@since IS NULL OR sh.CreatedAt >= @since OR sh.UpdatedAt >= @since OR sh.ApprovedAt >= @since)
+           ${parts.join('\n           UNION ALL\n           ')}
          ) x
          ORDER BY x.CreatedAt DESC, x.Id DESC`,
       );
@@ -404,9 +481,13 @@ export class MssqlRepo implements Repo {
         `SELECT COUNT(*) AS n, ISNULL(SUM(t.Credit), 0) AS total FROM (
            SELECT Credit FROM dbo.SavingsTransaction
            WHERE RTRIM(UserID) = @uid AND BankingType = '${BANKING_TYPE}' AND Status = 'PENDING'
-           UNION ALL
+           ${
+             this.schema.shares
+               ? `UNION ALL
            SELECT Credit FROM dbo.ShareTransaction
-           WHERE RTRIM(UserID) = @uid AND BankingType = '${BANKING_TYPE}' AND Status = 'PENDING'
+           WHERE RTRIM(UserID) = @uid AND BankingType = '${BANKING_TYPE}' AND Status = 'PENDING'`
+               : ''
+           }
          ) t`,
       );
     const r = result.recordset[0];
@@ -416,11 +497,12 @@ export class MssqlRepo implements Repo {
   // ---- text messages: the core's own settings and log ----------------------
 
   async getSmsSettings(): Promise<SmsSettings> {
+    // Defaults and the "true"/"1" rule are the core's own (getSMSConfig).
+    const s: SmsSettings = { enabled: false, provider: 'arkesel', apiKey: '', apiSecret: '', senderId: '', apiUrl: 'https://sms.arkesel.com/api/v2/sms/send' };
+    if (!this.schema.sms) return s; // texts are off on this database; already logged at startup
     const result = await this.pool
       .request()
       .query(`SELECT [Key], [Value] FROM dbo.AppSettings WHERE [Key] LIKE 'SMS[_]%'`);
-    // Defaults and the "true"/"1" rule are the core's own (getSMSConfig).
-    const s: SmsSettings = { enabled: false, provider: 'arkesel', apiKey: '', apiSecret: '', senderId: '', apiUrl: 'https://sms.arkesel.com/api/v2/sms/send' };
     for (const row of result.recordset) {
       const key = String(row.Key);
       const value = row.Value == null ? '' : String(row.Value);
@@ -435,16 +517,26 @@ export class MssqlRepo implements Repo {
   }
 
   async getSmsRecipient(customerCode: string): Promise<SmsRecipient> {
+    if (!this.schema.sms) return { phone: null, optedOut: false, firstName: '', fullName: '' };
+    const s = this.schema;
+    const contact = has(s, 'CustomerContact.CustomerID');
+    const prefs = has(s, 'CustomerAlertPreferences.CustomerID');
+    const col = (ok: boolean, expr: string, name: string) => `${ok ? expr : 'CAST(NULL AS varchar(50))'} AS ${name}`;
     const result = await this.pool
       .request()
       .input('code', sql.Numeric(10, 0), Number(customerCode))
       .query(
-        `SELECT c.FirstName, c.FullName, c.PhoneNo AS CustomerPhone,
-                cap.MobileNo AS AlertMobile, cap.SMSAlerts,
-                cc.MobileAlert, cc.PhoneNo AS ContactPhone, cc.ContactValue, cc.AlternatePhone
+        `SELECT ${col(has(s, 'Customer.FirstName'), 'c.FirstName', 'FirstName')}, c.FullName,
+                ${col(has(s, 'Customer.PhoneNo'), 'c.PhoneNo', 'CustomerPhone')},
+                ${col(prefs && has(s, 'CustomerAlertPreferences.MobileNo'), 'cap.MobileNo', 'AlertMobile')},
+                ${prefs && has(s, 'CustomerAlertPreferences.SMSAlerts') ? 'cap.SMSAlerts' : 'CAST(NULL AS int)'} AS SMSAlerts,
+                ${col(contact && has(s, 'CustomerContact.MobileAlert'), 'cc.MobileAlert', 'MobileAlert')},
+                ${col(contact && has(s, 'CustomerContact.PhoneNo'), 'cc.PhoneNo', 'ContactPhone')},
+                ${col(contact && has(s, 'CustomerContact.ContactValue'), 'cc.ContactValue', 'ContactValue')},
+                ${col(contact && has(s, 'CustomerContact.AlternatePhone'), 'cc.AlternatePhone', 'AlternatePhone')}
          FROM dbo.Customer c
-         LEFT JOIN dbo.CustomerContact cc ON cc.CustomerID = c.CustomerID
-         LEFT JOIN dbo.CustomerAlertPreferences cap ON cap.CustomerID = c.CustomerID
+         ${contact ? 'LEFT JOIN dbo.CustomerContact cc ON cc.CustomerID = c.CustomerID' : ''}
+         ${prefs ? 'LEFT JOIN dbo.CustomerAlertPreferences cap ON cap.CustomerID = c.CustomerID' : ''}
          WHERE c.Code = @code`,
       );
     const rows = result.recordset;
@@ -469,6 +561,7 @@ export class MssqlRepo implements Repo {
   }
 
   async hasSmsLog(referenceNo: string, messageType: string): Promise<boolean> {
+    if (!this.schema.sms) return false;
     const result = await this.pool
       .request()
       .input('ref', sql.VarChar(100), referenceNo)
@@ -494,12 +587,18 @@ export class MssqlRepo implements Repo {
       .input('uid', sql.NVarChar(100), e.userId)
       .input('err', sql.NVarChar(500), e.error)
       .input('resp', sql.VarChar(sql.MAX), e.apiResponse)
-      .query(
-        `INSERT dbo.SMSHistory
-           (ID, PhoneNumber, Message, MessageType, Status, RecipientName, RecipientID, CustomerCode, Module,
-            ReferenceNo, BranchCode, Origin, Cost, SentAt, UserID, ErrorMessage, APIResponse, CreatedBy)
-         VALUES (@id, @phone, @msg, @type, @status, @name, @cust, @cust, 'MOBILE_BANKING',
-            @ref, @branch, @origin, 0, @sentAt, @uid, @err, @resp, 'field-server')`,
-      );
+      .query(this.smsInsertSql());
+  }
+
+  /** The log insert, using only the SMSHistory columns this database has. */
+  private smsInsertSql(): string {
+    const all: [string, string][] = [
+      ['ID', '@id'], ['PhoneNumber', '@phone'], ['Message', '@msg'], ['MessageType', '@type'], ['Status', '@status'],
+      ['RecipientName', '@name'], ['RecipientID', '@cust'], ['CustomerCode', '@cust'], ['Module', "'MOBILE_BANKING'"],
+      ['ReferenceNo', '@ref'], ['BranchCode', '@branch'], ['Origin', '@origin'], ['Cost', '0'], ['SentAt', '@sentAt'],
+      ['UserID', '@uid'], ['ErrorMessage', '@err'], ['APIResponse', '@resp'], ['CreatedBy', "'field-server'"],
+    ];
+    const use = all.filter(([c]) => has(this.schema, `SMSHistory.${c}`));
+    return `INSERT dbo.SMSHistory (${use.map(([c]) => c).join(', ')}) VALUES (${use.map(([, v]) => v).join(', ')})`;
   }
 }
