@@ -1,7 +1,7 @@
 import DateTimePicker, { DateTimePickerAndroid, type DateTimePickerEvent } from '@react-native-community/datetimepicker';
 import { Ionicons } from '@expo/vector-icons';
 import { useEffect, useMemo, useState } from 'react';
-import { Platform, Pressable, ScrollView, Text, View } from 'react-native';
+import { LayoutAnimation, Platform, Pressable, ScrollView, Text, View } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import {
   PAGE_SIZE,
@@ -27,6 +27,8 @@ import type { Member, OutboxItem } from '@/domain/types';
 import { useApp } from '@/state/AppProvider';
 import { DepositRow, RADIUS, RegistrationRow, nums, shadow } from '@/ui/activity-rows';
 import { Reveal, SkeletonRow } from '@/ui/motion';
+import { AccountMenu } from '@/ui/account-menu';
+import { EmptyState } from '@/ui/states';
 import { colors } from '@/ui/theme';
 
 type Tab = 'deposits' | 'registrations';
@@ -106,7 +108,7 @@ function Pager({ page, pages, total, onPage }: { page: number; pages: number; to
   );
 }
 
-export default function HistoryScreen() {
+export default function ActivityTab() {
   const { repos, version } = useApp();
   const insets = useSafeAreaInsets();
   const [tab, setTab] = useState<Tab>('deposits');
@@ -162,13 +164,20 @@ export default function HistoryScreen() {
   const cash = tab === 'deposits' ? sumAmounts((filtered as { item: OutboxItem; status: HistoryStatus }[]).filter((r) => r.status !== 'REJECTED').map((r) => r.item.amount)) : null;
 
   const change = (next: () => void) => {
+    // The list eases to its new shape instead of jumping.
+    LayoutAnimation.configureNext(LayoutAnimation.create(220, LayoutAnimation.Types.easeInEaseOut, LayoutAnimation.Properties.opacity));
     next();
     setPage(1);
   };
   const preset = presetOf(range, today);
 
   return (
-    <ScrollView contentInsetAdjustmentBehavior="automatic" style={{ backgroundColor: colors.bg }} contentContainerStyle={{ padding: 16, paddingBottom: insets.bottom + 32, gap: 16 }}>
+    <ScrollView style={{ backgroundColor: colors.bg }} contentContainerStyle={{ paddingTop: insets.top + 12, paddingHorizontal: 16, paddingBottom: 32, gap: 16 }}>
+      <View style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' }}>
+        <Text style={{ fontSize: 26, fontWeight: '700', color: colors.text, letterSpacing: -0.6 }}>Activity</Text>
+        <AccountMenu />
+      </View>
+
       {/* Deposits or registrations */}
       <View style={{ flexDirection: 'row', padding: 3, borderRadius: 12, backgroundColor: colors.track, ...RADIUS }}>
         {(['deposits', 'registrations'] as const).map((t) => (
@@ -218,13 +227,12 @@ export default function HistoryScreen() {
         {!loaded ? (
           [0, 1, 2, 3].map((i) => <SkeletonRow key={i} />)
         ) : shown.rows.length === 0 ? (
-          <View style={{ padding: 32, alignItems: 'center', gap: 8 }}>
-            <Ionicons name={tab === 'deposits' ? 'cash-outline' : 'person-add-outline'} size={32} color={colors.muted} />
-            <Text style={{ fontSize: 15, fontWeight: '600', color: colors.text }}>Nothing here</Text>
-            <Text style={{ fontSize: 13, color: colors.muted, textAlign: 'center' }}>
-              No {tab === 'deposits' ? 'deposits' : 'registrations'} {filter === 'ALL' ? '' : `${filter.toLowerCase()} `}in this range.
-            </Text>
-          </View>
+          <EmptyState
+            icon={tab === 'deposits' ? 'cash-outline' : 'person-add-outline'}
+            title={`No ${tab === 'deposits' ? 'deposits' : 'registrations'} ${filter === 'ALL' ? '' : `${filter.toLowerCase()} `}in this range`}
+            body={filter === 'ALL' ? 'Try a wider range of dates.' : 'Try another status, or a wider range of dates.'}
+            action={filter !== 'ALL' ? { label: 'Show all statuses', onPress: () => change(() => setFilter('ALL')) } : undefined}
+          />
         ) : tab === 'deposits' ? (
           (shown.rows as { item: OutboxItem }[]).map((r, i) => (
             <Reveal key={r.item.localTransactionId} index={i} from={8}>

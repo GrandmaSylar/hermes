@@ -12,6 +12,9 @@ let reduce = false;
 void AccessibilityInfo.isReduceMotionEnabled?.().then((v) => (reduce = v)).catch(() => undefined);
 AccessibilityInfo.addEventListener?.('reduceMotionChanged', (v) => (reduce = v));
 
+/** True when the phone is set to reduce motion, so large animations can be skipped or shortened. */
+export const isReduceMotion = () => reduce;
+
 const EASE = Easing.bezier(0.22, 1, 0.36, 1);
 
 /** A light tap, where the phone supports it. Never throws. */

@@ -7,6 +7,7 @@ import type { ApiCapabilities, ApiClient, MemberConflict, MemberLookup } from '@
 import { HttpApi } from '@/data/api/http';
 import type { PhotoAnswer } from '@/data/photos';
 import { applyPreference, loadPreference, savePreference, type Preference } from '@/ui/appearance';
+import { loadIntroSeen, saveIntroSeen } from './intro-store';
 import { applyScheme, type Scheme } from '@/ui/colors';
 import { MockApi } from '@/data/api/mock';
 import { API_MODE, API_URL } from '@/config';
@@ -41,6 +42,10 @@ interface AppContextValue {
   capabilities: ApiCapabilities;
   /** Who already holds these IDs, phone numbers or emails. Null when there is no connection to ask. */
   checkMember: (lookup: MemberLookup) => Promise<MemberConflict[] | null>;
+  /** The first-launch animation: playing until it finishes, once per device. */
+  intro: { known: boolean; playing: boolean; finish: () => void };
+  /** False while the phone has no connection (or the development switch says so). */
+  online: boolean;
   /** Light, dark (AMOLED) or follow the phone. */
   appearance: { preference: Preference; scheme: Scheme; setPreference: (preference: Preference) => void };
   /** A member's passport photo from the office, or null when offline or there is none. */
@@ -81,6 +86,16 @@ export function AppProvider({ children }: { children: ReactNode }) {
     applyPreference(next);
     void savePreference(next);
   }, []);
+  const [introState, setIntroState] = useState<'unknown' | 'playing' | 'done'>('unknown');
+  useEffect(() => {
+    void loadIntroSeen().then((seen) => setIntroState((now) => (now === 'done' || seen ? 'done' : 'playing')));
+  }, []);
+  const finishIntro = useCallback(() => {
+    setIntroState('done');
+    void saveIntroSeen();
+  }, []);
+  const [online, setOnline] = useState(true);
+  useEffect(() => NetInfo.addEventListener((s) => setOnline(s.isConnected === true && s.isInternetReachable !== false)), []);
   const [status, setStatus] = useState<AppStatus>('loading');
   const [error, setError] = useState<string | null>(null);
   const [session, setSession] = useState<Session | null>(null);
@@ -131,6 +146,8 @@ export function AppProvider({ children }: { children: ReactNode }) {
           setRepos(createSqliteRepos(db));
           setSession(stored);
           setStatus('locked');
+          // Someone already signed in here: this is not a new device, so there is no introduction to play.
+          finishIntro();
         } else {
           setStatus('signedOut');
         }
@@ -285,6 +302,8 @@ export function AppProvider({ children }: { children: ReactNode }) {
     checkMember,
     memberPhoto,
     appearance: { preference, scheme, setPreference },
+    intro: { known: introState !== 'unknown', playing: introState === 'playing', finish: finishIntro },
+    online: online && !simulateOffline,
     files,
     apiMode: API_MODE,
     signInOtp,

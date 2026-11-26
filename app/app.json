@@ -38,6 +38,19 @@
       ],
       "expo-secure-store",
       [
+        "expo-splash-screen",
+        {
+          "image": "./assets/splash-icon.png",
+          "imageWidth": 180,
+          "resizeMode": "contain",
+          "backgroundColor": "#FFFFFF",
+          "dark": {
+            "image": "./assets/cua-emblem-white.png",
+            "backgroundColor": "#000000"
+          }
+        }
+      ],
+      [
         "expo-image-picker",
         {
           "cameraPermission": "Allow QSS Mobile Banking to take the member's photo, ID card and signature for KYC.",

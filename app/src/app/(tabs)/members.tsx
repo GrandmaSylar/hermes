@@ -7,6 +7,7 @@ import type { Member } from '@/domain/types';
 import { useApp } from '@/state/AppProvider';
 import { RADIUS, SHADOW } from '@/ui/theme';
 import { AccountMenu } from '@/ui/account-menu';
+import { EmptyState } from '@/ui/states';
 import { PressScale, Reveal, SkeletonRow } from '@/ui/motion';
 import { Avatar, Card, colors } from '@/ui/theme';
 
@@ -159,15 +160,13 @@ export default function MembersTab() {
       }
       ListEmptyComponent={
         results === null ? undefined : (
-          <Card style={{ alignItems: 'center', gap: 8, paddingVertical: 32 }}>
-            <Ionicons name={total === 0 ? 'cloud-offline-outline' : 'search-outline'} size={32} color={colors.muted} />
-            <Text style={{ color: colors.muted, textAlign: 'center' }}>
-              {total === 0
-                ? 'No members yet. Sync when online.'
-                : !searching
-                  ? 'Search for a member. Star the ones you see often.'
-                  : 'No member matches.'}
-            </Text>
+          <Card style={{ padding: 0 }}>
+            <EmptyState
+              icon={total === 0 ? 'cloud-offline-outline' : 'search-outline'}
+              title={total === 0 ? 'No members yet' : searching ? 'No member matches' : 'Find a member'}
+              body={total === 0 ? 'Sync when you are online to download the member list.' : searching ? 'Check the spelling, or try the member number or phone.' : 'Search by name, number or phone. Star the ones you see often.'}
+              action={total === 0 ? { label: 'Sync now', onPress: () => void syncNow() } : undefined}
+            />
           </Card>
         )
       }

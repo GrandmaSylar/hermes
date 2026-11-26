@@ -1,7 +1,11 @@
 import { Stack } from 'expo-router';
+import * as SplashScreen from 'expo-splash-screen';
 import { StatusBar } from 'expo-status-bar';
 import { AppProvider, useApp } from '@/state/AppProvider';
 import { colors } from '@/ui/theme';
+
+// Keep the phone's own splash screen up until the first screen is ready to take over (see the entry screen).
+void SplashScreen.preventAutoHideAsync().catch(() => undefined);
 
 /**
  * Which screens exist is decided here, in one place, by the app's state: the loading screen while it starts
@@ -10,8 +14,9 @@ import { colors } from '@/ui/theme';
  * on sign-out. No screen redirects on its own: that is what used to loop ("Maximum update depth exceeded").
  */
 function Screens() {
-  const { status, appearance } = useApp();
-  const starting = status === 'loading' || status === 'error';
+  const { status, appearance, intro } = useApp();
+  // The opening animation is part of starting: it holds the entry screen until it has played.
+  const starting = status === 'loading' || status === 'error' || intro.playing;
   const signedOut = status === 'signedOut' || status === 'locked';
   const signedIn = status === 'ready';
   return (
@@ -40,7 +45,6 @@ function Screens() {
           <Stack.Screen name="member/[code]" options={{ title: 'Member' }} />
           <Stack.Screen name="collect/[code]" options={{ title: '', animation: 'fade_from_bottom' }} />
           <Stack.Screen name="register" options={{ title: 'Register member', animation: 'fade_from_bottom' }} />
-          <Stack.Screen name="history" options={{ title: 'Activity history', headerBackButtonDisplayMode: 'minimal' }} />
         </Stack.Protected>
       </Stack>
     </>
