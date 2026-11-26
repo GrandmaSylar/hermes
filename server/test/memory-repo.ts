@@ -119,6 +119,10 @@ export class MemoryRepo implements Repo {
   async getBranchInfo(_branchCode: string) {
     return this.branch;
   }
+  logo: { version: string; dataUri: string } | null = { version: 'v1', dataUri: 'data:image/png;base64,AAAA' };
+  async getLogo(_branchCode: string) {
+    return this.logo;
+  }
   async listMembers(_branchCode: string, afterCode: number, limit: number) {
     return this.members
       .filter((m) => Number(m.code) > afterCode)

@@ -54,7 +54,7 @@ export function Button(props: {
         ...(filled && !inactive ? { boxShadow: '0 6px 16px rgba(25, 118, 210, 0.32)' } : {}),
       }}
     >
-      {props.busy ? <Dots color={fg} size={7} /> : <Text style={{ color: fg, fontSize: 17, fontWeight: '700', letterSpacing: -0.2 }}>{props.title}</Text>}
+      {props.busy ? <Dots color={fg} size={7} /> : <Text style={{ color: fg, fontSize: 15, fontWeight: '700', letterSpacing: -0.2 }}>{props.title}</Text>}
     </PressScale>
   );
 }
@@ -67,7 +67,7 @@ export function Field(props: TextInputProps & { label: string; error?: string | 
   const to = (v: number) => Animated.timing(ring, { toValue: v, duration: 160, useNativeDriver: false }).start();
   return (
     <View style={{ marginBottom: 16 }}>
-      <Text style={{ fontSize: 13, color: focused ? colors.primary : colors.muted, marginBottom: 6, fontWeight: '600', marginLeft: 2 }}>{label}</Text>
+      <Text style={{ fontSize: 12, color: focused ? colors.primary : colors.muted, marginBottom: 6, fontWeight: '600', marginLeft: 2 }}>{label}</Text>
       <Animated.View
         style={{
           borderRadius: 14,
@@ -89,11 +89,11 @@ export function Field(props: TextInputProps & { label: string; error?: string | 
             to(0);
             onBlur?.(e);
           }}
-          style={[{ minHeight: 52, paddingHorizontal: 14, fontSize: 17, color: colors.text }, style]}
+          style={[{ minHeight: 52, paddingHorizontal: 14, fontSize: 15, color: colors.text }, style]}
           {...rest}
         />
       </Animated.View>
-      {error ? <Text style={{ color: colors.danger, fontSize: 13, marginTop: 6, marginLeft: 2 }}>{error}</Text> : null}
+      {error ? <Text style={{ color: colors.danger, fontSize: 12, marginTop: 6, marginLeft: 2 }}>{error}</Text> : null}
     </View>
   );
 }
@@ -113,7 +113,7 @@ export function Card({ children, style }: { children: React.ReactNode; style?: o
 
 /** A small capital heading above a group of cards, as in iOS settings. */
 export function SectionLabel({ children }: { children: React.ReactNode }) {
-  return <Text style={{ fontSize: 13, fontWeight: '700', color: colors.muted, letterSpacing: 0.6, marginLeft: 4, textTransform: 'uppercase' }}>{children}</Text>;
+  return <Text style={{ fontSize: 12, fontWeight: '700', color: colors.muted, letterSpacing: 0.6, marginLeft: 4, textTransform: 'uppercase' }}>{children}</Text>;
 }
 
 /** A round badge with a person's initials. */
@@ -122,7 +122,7 @@ export function Avatar({ name, size = 56, tone = 'blue' }: { name: string; size?
   const soft = tone === 'soft';
   return (
     <View style={{ width: size, height: size, borderRadius: size / 2, backgroundColor: soft ? colors.primarySoft : colors.primary, alignItems: 'center', justifyContent: 'center' }}>
-      <Text style={{ color: soft ? colors.primaryDeep : colors.primaryText, fontSize: size * 0.36, fontWeight: '700' }}>{letters}</Text>
+      <Text style={{ color: soft ? colors.primaryDeep : colors.primaryText, fontSize: size * 0.34, fontWeight: '700' }}>{letters}</Text>
     </View>
   );
 }

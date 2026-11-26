@@ -76,3 +76,18 @@ export function checkDocument(body: DocumentBody): CheckedDocument | { problem: 
   const fileName = body.fileName.replace(/^.*[\\/]/, '').replace(/[^\w .()-]/g, '_').slice(0, 200);
   return { kind: body.kind, fileName, mimeType, bytes };
 }
+
+/** The most a stored logo may be before it is left out: it is sent to every phone. */
+export const MAX_LOGO_CHARS = 1_500_000;
+
+/** A stored logo, if it is a picture data URL of a sensible size. Anything else is treated as no logo. */
+export function logoFrom(value: unknown): { version: string; dataUri: string } | null {
+  if (typeof value !== 'string') return null;
+  const text = value.trim();
+  if (text.length === 0 || text.length > MAX_LOGO_CHARS) return null;
+  if (!/^data:image\/(png|jpeg|jpg|gif);base64,[A-Za-z0-9+/=\s]+$/.test(text)) return null;
+  // A cheap fingerprint is enough: it only has to change when the picture does.
+  let hash = 5381;
+  for (let i = 0; i < text.length; i += 1) hash = ((hash << 5) + hash + text.charCodeAt(i)) | 0;
+  return { version: `${text.length.toString(16)}-${(hash >>> 0).toString(16)}`, dataUri: text };
+}

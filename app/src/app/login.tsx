@@ -100,8 +100,8 @@ export default function Login() {
             </View>
           </Reveal>
           <Reveal index={1}>
-            <Text style={{ fontSize: 32, fontWeight: '800', color: '#FFFFFF', letterSpacing: -0.6 }}>QSS Mobile Banking</Text>
-            <Text style={{ fontSize: 16, color: 'rgba(255,255,255,0.82)', marginTop: 4 }}>Field collections and member registration</Text>
+            <Text style={{ fontSize: 26, fontWeight: '700', color: '#FFFFFF', letterSpacing: -0.6 }}>QSS Mobile Banking</Text>
+            <Text style={{ fontSize: 15, color: 'rgba(255,255,255,0.82)', marginTop: 4 }}>Field collections and member registration</Text>
           </Reveal>
         </View>
 
@@ -111,7 +111,7 @@ export default function Login() {
             <View style={{ backgroundColor: colors.card, borderRadius: 28, padding: 22, ...RADIUS, boxShadow: '0 12px 32px rgba(16, 24, 40, 0.12)' }}>
               {apiMode === 'mock' ? (
                 <View style={{ backgroundColor: colors.warnBg, padding: 12, borderRadius: 12, marginBottom: 18 }}>
-                  <Text style={{ color: colors.warn, fontSize: 13 }}>Demo mode: this build is not connected to the core banking system. Nothing you enter reaches the office.</Text>
+                  <Text style={{ color: colors.warn, fontSize: 12 }}>Demo mode. Nothing reaches the office.</Text>
                 </View>
               ) : null}
 
@@ -121,24 +121,24 @@ export default function Login() {
                     <View style={{ width: 64, height: 64, borderRadius: 32, backgroundColor: colors.primarySoft, alignItems: 'center', justifyContent: 'center' }}>
                       <Ionicons name="finger-print" size={34} color={colors.primary} />
                     </View>
-                    <Text style={{ fontSize: 20, fontWeight: '700', color: colors.text }}>Welcome back</Text>
-                    <Text style={{ color: colors.muted, textAlign: 'center' }}>Unlock with your fingerprint, face or phone screen lock.</Text>
+                    <Text style={{ fontSize: 17, fontWeight: '700', color: colors.text }}>Welcome back</Text>
+                    <Text style={{ color: colors.muted, textAlign: 'center' }}>Use your fingerprint, face or screen lock</Text>
                   </View>
                   <Button title="Unlock" onPress={doUnlock} busy={busy} />
                 </View>
               ) : step === 'password' ? (
                 <View>
-                  <Text style={{ fontSize: 22, fontWeight: '800', color: colors.text, letterSpacing: -0.3, marginBottom: 4 }}>Sign in</Text>
-                  <Text style={{ color: colors.muted, marginBottom: 20 }}>Use the staff ID and PIN the office gave you.</Text>
+                  <Text style={{ fontSize: 18, fontWeight: '700', color: colors.text, letterSpacing: -0.3, marginBottom: 4 }}>Sign in</Text>
+                  <Text style={{ color: colors.muted, marginBottom: 20 }}>Staff ID and PIN</Text>
                   <Field label="Staff ID" value={staffId} onChangeText={setStaffId} autoCapitalize={apiMode === 'http' ? 'none' : 'characters'} autoCorrect={false} />
                   <Field label={apiMode === 'http' ? 'PIN' : 'Password'} value={password} onChangeText={setPassword} secureTextEntry autoCapitalize="none" />
                   <Button title="Continue" onPress={submitPassword} busy={busy} disabled={!staffId.trim() || !password} />
                 </View>
               ) : (
                 <View>
-                  <Text style={{ fontSize: 22, fontWeight: '800', color: colors.text, letterSpacing: -0.3, marginBottom: 4 }}>Check your phone</Text>
-                  <Text style={{ color: colors.muted, marginBottom: 20 }}>Enter the 6-digit code sent to you by SMS.</Text>
-                  <Field label="Code" value={otp} onChangeText={setOtp} keyboardType="number-pad" maxLength={6} style={{ fontSize: 24, letterSpacing: 8, fontWeight: '700' }} />
+                  <Text style={{ fontSize: 18, fontWeight: '700', color: colors.text, letterSpacing: -0.3, marginBottom: 4 }}>Check your phone</Text>
+                  <Text style={{ color: colors.muted, marginBottom: 20 }}>The 6-digit code sent by SMS</Text>
+                  <Field label="Code" value={otp} onChangeText={setOtp} keyboardType="number-pad" maxLength={6} style={{ fontSize: 20, letterSpacing: 8, fontWeight: '700' }} />
                   <Button title="Verify" onPress={submitOtp} busy={busy} disabled={otp.trim().length !== 6} />
                   <View style={{ height: 10 }} />
                   <Button title="Back" variant="secondary" onPress={() => setStep('password')} disabled={busy} />

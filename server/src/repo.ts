@@ -15,6 +15,12 @@ export interface Officer {
   active: boolean;
 }
 
+export interface CreditUnionLogo {
+  /** Changes whenever the picture does, so the phone only downloads it again when it must. */
+  version: string;
+  dataUri: string;
+}
+
 export interface BranchInfo {
   code: string;
   name: string;
@@ -165,6 +171,8 @@ export interface Repo {
   getOfficer(id: string): Promise<Officer | null>;
   /** The officer's branch and the credit union it belongs to, as named in the core database. Null when it cannot be read. */
   getBranchInfo(branchCode: string): Promise<BranchInfo | null>;
+  /** The credit union's logo as a picture data URL, or null when none is stored. */
+  getLogo(branchCode: string): Promise<CreditUnionLogo | null>;
   listMembers(branchCode: string, afterCode: number, limit: number): Promise<MemberRow[]>;
   getAccount(kind: DepositKind, accountId: number): Promise<AccountInfo | null>;
   insertDeposit(input: DepositInput): Promise<InsertOutcome>;

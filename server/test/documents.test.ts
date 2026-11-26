@@ -151,3 +151,20 @@ describe('POST /v1/members/:code/documents', () => {
     expect((await app.inject({ method: 'GET', url: '/v1/me', headers: { authorization: auth } })).json().capabilities.documents).toBe(false);
   });
 });
+
+describe('stored logo', () => {
+  test('accepts a picture data URL and fingerprints it', async () => {
+    const { logoFrom } = await import('../src/documents');
+    const a = logoFrom('data:image/jpeg;base64,/9j/4AAQ');
+    expect(a?.dataUri).toBe('data:image/jpeg;base64,/9j/4AAQ');
+    expect(logoFrom('data:image/jpeg;base64,/9j/4AAR')?.version).not.toBe(a?.version);
+  });
+  test('leaves out anything else', async () => {
+    const { logoFrom } = await import('../src/documents');
+    expect(logoFrom(null)).toBeNull();
+    expect(logoFrom('')).toBeNull();
+    expect(logoFrom('C:/logos/a.png')).toBeNull();
+    expect(logoFrom('data:text/html;base64,PGI+')).toBeNull();
+    expect(logoFrom(`data:image/png;base64,${'A'.repeat(1_600_000)}`)).toBeNull();
+  });
+});

@@ -20,10 +20,10 @@ function MemberRow({ member, index }: { member: Member; index: number }) {
           <Avatar name={member.name} size={46} tone="soft" />
           <View style={{ flex: 1, gap: 2 }}>
             <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6 }}>
-              <Text numberOfLines={1} style={{ flexShrink: 1, fontSize: 16, color: colors.text, fontWeight: '700' }}>{member.name}</Text>
+              <Text numberOfLines={1} style={{ flexShrink: 1, fontSize: 15, color: colors.text, fontWeight: '700' }}>{member.name}</Text>
               {member.myCustomer ? <Ionicons name="star" size={14} color="#F5A623" /> : null}
             </View>
-            <Text numberOfLines={1} style={{ color: colors.muted, fontSize: 13 }}>{member.memberCode} · {member.phone}</Text>
+            <Text numberOfLines={1} style={{ color: colors.muted, fontSize: 12 }}>{[member.memberCode, member.phone].filter(Boolean).join(' · ')}</Text>
             {status ? (
               <View style={{ alignSelf: 'flex-start', marginTop: 4, paddingHorizontal: 8, paddingVertical: 2, borderRadius: 999, backgroundColor: colors.warnBg }}>
                 <Text style={{ fontSize: 11, fontWeight: '700', color: colors.warn }}>{status}</Text>
@@ -99,12 +99,12 @@ export default function MembersTab() {
       contentContainerStyle={{ paddingTop: insets.top + 12, paddingHorizontal: 16, paddingBottom: 32, gap: 10 }}
       ListHeaderComponent={
         <View style={{ gap: 14, marginBottom: 6 }}>
-          <Text style={{ fontSize: 34, fontWeight: '800', color: colors.text, letterSpacing: -0.6 }}>{mode === 'deposit' ? 'Take a deposit' : 'Members'}</Text>
+          <Text style={{ fontSize: 26, fontWeight: '700', color: colors.text, letterSpacing: -0.6 }}>{mode === 'deposit' ? 'Take a deposit' : 'Members'}</Text>
           {mode === 'deposit' ? (
             <Reveal>
               <View style={{ flexDirection: 'row', gap: 10, alignItems: 'center', backgroundColor: colors.primarySoft, borderRadius: 16, padding: 14, ...RADIUS }}>
                 <Ionicons name="cash-outline" size={22} color={colors.primaryDeep} />
-                <Text style={{ flex: 1, color: colors.primaryDeep, fontWeight: '600' }}>Choose the member who is paying in, then tap their name.</Text>
+                <Text style={{ flex: 1, color: colors.primaryDeep, fontWeight: '600' }}>Pick who is paying in</Text>
               </View>
             </Reveal>
           ) : null}
@@ -128,22 +128,22 @@ export default function MembersTab() {
               onChangeText={setQuery}
               onFocus={() => setFocused(true)}
               onBlur={() => setFocused(false)}
-              placeholder="Name, member no., phone or account no."
+              placeholder="Name, number, phone"
               placeholderTextColor={colors.muted}
               autoFocus={mode === 'deposit'}
               autoCorrect={false}
               autoCapitalize="none"
               returnKeyType="search"
               clearButtonMode="while-editing"
-              style={{ flex: 1, fontSize: 16, color: colors.text, minHeight: 48 }}
+              style={{ flex: 1, fontSize: 15, color: colors.text, minHeight: 48 }}
             />
           </View>
-          {note ? <Text style={{ color: colors.warn, fontSize: 13 }}>{note}</Text> : null}
-          <Text style={{ color: colors.muted, fontSize: 13, marginLeft: 4 }}>
+          {note ? <Text style={{ color: colors.warn, fontSize: 12 }}>{note}</Text> : null}
+          <Text style={{ color: colors.muted, fontSize: 12, marginLeft: 4 }}>
             {results === null
               ? 'Loading members…'
               : !searching
-                ? `My customers and frequent members · ${total.toLocaleString()} on this phone`
+                ? `${total.toLocaleString()} members`
                 : `${results.length}${results.length === RESULT_LIMIT ? '+' : ''} found`}
           </Text>
           {results === null ? (
@@ -159,9 +159,9 @@ export default function MembersTab() {
             <Ionicons name={total === 0 ? 'cloud-offline-outline' : 'search-outline'} size={32} color={colors.muted} />
             <Text style={{ color: colors.muted, textAlign: 'center' }}>
               {total === 0
-                ? 'No members yet. Connect to the network and sync.'
+                ? 'No members yet. Sync when online.'
                 : !searching
-                  ? 'Search for a member, then tap the star on their page to add them to My customers.'
+                  ? 'Search for a member. Star the ones you see often.'
                   : 'No member matches.'}
             </Text>
           </Card>

@@ -18,8 +18,8 @@ function BalanceRow({ icon, label, value, last }: { icon: IconName; label: strin
       <View style={{ width: 36, height: 36, borderRadius: 18, backgroundColor: colors.primarySoft, alignItems: 'center', justifyContent: 'center' }}>
         <Ionicons name={icon} size={18} color={colors.primary} />
       </View>
-      <Text style={{ flex: 1, color: colors.text, fontSize: 16 }}>{label}</Text>
-      <Text selectable style={{ color: value === null ? colors.muted : colors.text, fontWeight: '700', fontSize: 16, fontVariant: ['tabular-nums'] }}>{balanceText(value, formatAmount)}</Text>
+      <Text style={{ flex: 1, color: colors.text, fontSize: 15 }}>{label}</Text>
+      <Text selectable style={{ color: value === null ? colors.muted : colors.text, fontWeight: '700', fontSize: 15, fontVariant: ['tabular-nums'] }}>{balanceText(value, formatAmount)}</Text>
     </View>
   );
 }
@@ -53,7 +53,7 @@ export default function MemberScreen() {
     return (
       <View style={{ flex: 1, backgroundColor: colors.bg, alignItems: 'center', justifyContent: 'center', gap: 10, padding: 24 }}>
         <Ionicons name="person-remove-outline" size={40} color={colors.muted} />
-        <Text style={{ color: colors.muted, fontSize: 16 }}>Member not found on this phone.</Text>
+        <Text style={{ color: colors.muted, fontSize: 15 }}>Member not found on this phone.</Text>
       </View>
     );
   }
@@ -95,8 +95,8 @@ export default function MemberScreen() {
           <View style={{ padding: 4, borderRadius: 40, backgroundColor: 'rgba(255,255,255,0.25)' }}>
             <Avatar name={member.name} size={72} tone="soft" />
           </View>
-          <Text selectable style={{ fontSize: 24, fontWeight: '800', color: '#FFFFFF', letterSpacing: -0.4, textAlign: 'center', marginTop: 6 }}>{member.name}</Text>
-          <Text selectable style={{ color: 'rgba(255,255,255,0.85)', fontSize: 14 }}>{member.memberCode} · {member.phone}</Text>
+          <Text selectable style={{ fontSize: 20, fontWeight: '700', color: '#FFFFFF', letterSpacing: -0.4, textAlign: 'center', marginTop: 6 }}>{member.name}</Text>
+          <Text selectable style={{ color: 'rgba(255,255,255,0.85)', fontSize: 13 }}>{[member.memberCode, member.phone].filter(Boolean).join(' · ')}</Text>
           {!active ? (
             <View style={{ marginTop: 8, paddingHorizontal: 12, paddingVertical: 4, borderRadius: 999, backgroundColor: colors.warnBg }}>
               <Text style={{ color: colors.warn, fontWeight: '700', fontSize: 12 }}>{member.status === 'INACTIVE' ? 'Inactive' : 'Awaiting approval'}</Text>
@@ -114,7 +114,7 @@ export default function MemberScreen() {
             <BalanceRow icon="card-outline" label="Loan outstanding" value={member.balances.loan} last />
           </Card>
           <Text style={{ color: colors.muted, fontSize: 12, marginLeft: 4 }}>
-            As of last sync, {new Date(member.asOf).toLocaleString()}. The office confirms the final balance.
+            As of {new Date(member.asOf).toLocaleDateString('en-GB', { day: 'numeric', month: 'short' })}
           </Text>
         </View>
       </Reveal>
@@ -127,7 +127,7 @@ export default function MemberScreen() {
             return (
               <View key={type} style={{ gap: 6 }}>
                 <Button title={depositTitle(type)} onPress={() => router.push(`/collect/${member.memberCode}?type=${type}`)} disabled={reason !== null} variant={type === 'savings' ? 'primary' : 'secondary'} />
-                {reason && active ? <Text style={{ color: colors.warn, fontSize: 13, marginLeft: 4 }}>{reason}</Text> : null}
+                {reason && active ? <Text style={{ color: colors.warn, fontSize: 12, marginLeft: 4 }}>{reason}</Text> : null}
               </View>
             );
           })}

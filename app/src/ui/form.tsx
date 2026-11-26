@@ -1,5 +1,5 @@
 import { Ionicons } from '@expo/vector-icons';
-import { useMemo, useState } from 'react';
+import React, { useMemo, useState } from 'react';
 import { FlatList, Modal, Pressable, Switch, Text, TextInput, View, type TextInputProps } from 'react-native';
 import { colors } from '@/ui/theme';
 
@@ -12,7 +12,7 @@ export interface Option {
 
 export const toOptions = (values: readonly string[]): Option[] => values.map((v) => ({ value: v, label: v }));
 
-const labelStyle = { fontSize: 13, color: colors.muted, marginBottom: 6, marginLeft: 2, fontWeight: '600' as const };
+const labelStyle = { fontSize: 12, color: colors.muted, marginBottom: 6, marginLeft: 2, fontWeight: '600' as const };
 
 export function Required({ label, required }: { label: string; required?: boolean }) {
   return (
@@ -24,7 +24,7 @@ export function Required({ label, required }: { label: string; required?: boolea
 }
 
 function Help({ error, help }: { error?: string | null; help?: string }) {
-  if (error) return <Text style={{ color: colors.danger, fontSize: 13, marginTop: 6 }}>{error}</Text>;
+  if (error) return <Text style={{ color: colors.danger, fontSize: 12, marginTop: 6 }}>{error}</Text>;
   if (help) return <Text style={{ color: colors.muted, fontSize: 12, marginTop: 6 }}>{help}</Text>;
   return null;
 }
@@ -38,12 +38,14 @@ export function TextField(
     required?: boolean;
     error?: string | null;
     help?: string;
+    /** No space below, for a field that sits in a row with something else. */
+    flush?: boolean;
   },
 ) {
-  const { label, value, onChange, required, error, help, style, multiline, onFocus, onBlur, ...rest } = props;
+  const { label, value, onChange, required, error, help, style, multiline, onFocus, onBlur, flush, ...rest } = props;
   const [focused, setFocused] = useState(false);
   return (
-    <View style={{ marginBottom: 14 }}>
+    <View style={{ marginBottom: flush ? 0 : 14 }}>
       <Required label={label} required={required} />
       <TextInput
         value={value}
@@ -67,7 +69,7 @@ export function TextField(
             borderCurve: 'continuous',
             paddingHorizontal: 14,
             paddingVertical: multiline ? 12 : 0,
-            fontSize: 16,
+            fontSize: 15,
             backgroundColor: focused ? colors.card : '#EEF1F6',
             color: colors.text,
             textAlignVertical: multiline ? 'top' : 'center',
@@ -171,7 +173,7 @@ export function SelectField(props: {
           opacity: props.disabled ? 0.5 : 1,
         }}
       >
-        <Text style={{ fontSize: 16, color: current ? colors.text : colors.muted }}>
+        <Text style={{ fontSize: 15, color: current ? colors.text : colors.muted }}>
           {current ? current.label : props.placeholder ?? 'Choose'}
         </Text>
         <Ionicons name="chevron-down" size={18} color={colors.muted} />
@@ -182,7 +184,7 @@ export function SelectField(props: {
         <Pressable style={{ flex: 1, backgroundColor: 'rgba(16,24,40,0.45)' }} onPress={close} />
         <View style={{ maxHeight: '72%', backgroundColor: colors.card, borderTopLeftRadius: 28, borderTopRightRadius: 28, paddingTop: 10, borderCurve: 'continuous' }}>
           <View style={{ alignSelf: 'center', width: 40, height: 5, borderRadius: 3, backgroundColor: '#D5D9E2', marginBottom: 12 }} />
-          <Text style={{ fontSize: 18, fontWeight: '800', color: colors.text, paddingHorizontal: 20, paddingBottom: 10, letterSpacing: -0.2 }}>{props.label}</Text>
+          <Text style={{ fontSize: 16, fontWeight: '700', color: colors.text, paddingHorizontal: 20, paddingBottom: 10, letterSpacing: -0.2 }}>{props.label}</Text>
           {searchable ? (
             <TextInput
               value={filter}
@@ -219,7 +221,7 @@ export function SelectField(props: {
                   borderTopColor: colors.border,
                 })}
               >
-                <Text style={{ fontSize: 16, color: colors.text, fontWeight: item.value === props.value ? '700' : '400' }}>{item.label}</Text>
+                <Text style={{ fontSize: 15, color: colors.text, fontWeight: item.value === props.value ? '700' : '400' }}>{item.label}</Text>
               </Pressable>
             )}
             ListEmptyComponent={<Text style={{ color: colors.muted, padding: 16 }}>Nothing matches.</Text>}
@@ -246,7 +248,7 @@ export function SwitchRow(props: { label: string; help?: string; value: boolean;
   return (
     <View style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', marginBottom: 14, gap: 12 }}>
       <View style={{ flex: 1 }}>
-        <Text style={{ fontSize: 15, color: colors.text, fontWeight: '500' }}>{props.label}</Text>
+        <Text style={{ fontSize: 14, color: colors.text, fontWeight: '500' }}>{props.label}</Text>
         {props.help ? <Text style={{ fontSize: 12, color: colors.muted, marginTop: 2 }}>{props.help}</Text> : null}
       </View>
       <Switch value={props.value} onValueChange={props.onChange} trackColor={{ true: colors.primary }} />
@@ -255,7 +257,7 @@ export function SwitchRow(props: { label: string; help?: string; value: boolean;
 }
 
 export function SectionTitle({ children }: { children: string }) {
-  return <Text style={{ fontSize: 17, fontWeight: '800', color: colors.text, marginTop: 8, marginBottom: 12, letterSpacing: -0.2 }}>{children}</Text>;
+  return <Text style={{ fontSize: 15, fontWeight: '700', color: colors.text, marginTop: 8, marginBottom: 12, letterSpacing: -0.2 }}>{children}</Text>;
 }
 
 /** The problems found on a step, listed together at the top as the office form does. */
@@ -265,7 +267,7 @@ export function ProblemBox({ problems }: { problems: { message: string }[] }) {
     <View style={{ backgroundColor: colors.dangerBg, borderRadius: 14, borderCurve: 'continuous', padding: 14, marginBottom: 14 }}>
       <Text style={{ color: colors.danger, fontWeight: '700', marginBottom: 4 }}>Please correct the following</Text>
       {problems.map((p, i) => (
-        <Text key={i} style={{ color: colors.danger, fontSize: 13, marginTop: 2 }}>
+        <Text key={i} style={{ color: colors.danger, fontSize: 12, marginTop: 2 }}>
           • {p.message}
         </Text>
       ))}
@@ -279,7 +281,47 @@ export function NoticeBox({ tone, children }: { tone: 'warn' | 'info'; children:
   const fg = tone === 'warn' ? colors.warn : colors.primaryDeep;
   return (
     <View style={{ backgroundColor: bg, borderRadius: 14, borderCurve: 'continuous', padding: 14, marginBottom: 14 }}>
-      <Text style={{ color: fg, fontSize: 13 }}>{children}</Text>
+      <Text style={{ color: fg, fontSize: 12 }}>{children}</Text>
+    </View>
+  );
+}
+
+/** Two short fields side by side. */
+export function Pair({ children }: { children: React.ReactNode }) {
+  return <View style={{ flexDirection: 'row', gap: 12 }}>{React.Children.map(children, (c) => <View style={{ flex: 1 }}>{c}</View>)}</View>;
+}
+
+/** A white card around a few related fields, with an optional small heading. */
+export function Group({ title, children }: { title?: string; children: React.ReactNode }) {
+  return (
+    <View style={{ backgroundColor: colors.card, borderRadius: 20, borderCurve: 'continuous', padding: 16, paddingBottom: 4, boxShadow: '0 1px 2px rgba(16, 24, 40, 0.06), 0 2px 8px rgba(16, 24, 40, 0.04)' }}>
+      {title ? <Text style={{ fontSize: 12, fontWeight: '700', color: colors.muted, letterSpacing: 0.6, textTransform: 'uppercase', marginBottom: 12 }}>{title}</Text> : null}
+      {children}
+    </View>
+  );
+}
+
+/** Rarely needed fields, folded away until asked for. Opens by itself if one of them is filled or wrong. */
+export function Disclosure({ title, open: forced, children }: { title: string; open?: boolean; children: React.ReactNode }) {
+  const [open, setOpen] = useState(false);
+  const shown = open || forced === true;
+  return (
+    <View style={{ marginBottom: 12 }}>
+      <Pressable accessibilityRole="button" accessibilityState={{ expanded: shown }} onPress={() => setOpen(!shown)} style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', minHeight: 44 }}>
+        <Text style={{ color: colors.primary, fontSize: 14, fontWeight: '600' }}>{shown ? 'Show less' : title}</Text>
+        <Ionicons name={shown ? 'chevron-up' : 'chevron-down'} size={16} color={colors.primary} />
+      </Pressable>
+      {shown ? <View style={{ marginTop: 8 }}>{children}</View> : null}
+    </View>
+  );
+}
+
+/** A row in a Group: a label and a switch, separated from the next by a hairline. */
+export function ToggleLine({ label, value, onChange, last }: { label: string; value: boolean; onChange: (v: boolean) => void; last?: boolean }) {
+  return (
+    <View style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', minHeight: 48, borderBottomWidth: last ? 0 : 1, borderBottomColor: colors.border, marginBottom: last ? 8 : 0 }}>
+      <Text style={{ flex: 1, fontSize: 15, color: colors.text }}>{label}</Text>
+      <Switch value={value} onValueChange={onChange} trackColor={{ true: colors.primary }} />
     </View>
   );
 }

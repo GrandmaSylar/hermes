@@ -190,6 +190,11 @@ export interface ApiClient {
   checkMember(session: Session, lookup: MemberLookup): Promise<MemberConflict[]>;
   /** Asks the server what it can do today (for example, whether registration is switched on). */
   refreshCapabilities?(session: Session): Promise<void>;
+  /**
+   * The credit union's logo as a picture data URL. Pass the version already on the phone: 'UNCHANGED' comes back
+   * when it is still current, null when the credit union has no logo.
+   */
+  fetchLogo?(session: Session, have: string | null): Promise<{ version: string; dataUri: string } | 'UNCHANGED' | null>;
   /** The office's decisions on collections changed since the given time (or the latest ones if null). */
   pullDecisions(session: Session, since: string | null): Promise<OfficeDecision[]>;
   limits(session: Session): Promise<MobilizerLimits>;

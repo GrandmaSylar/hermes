@@ -1,6 +1,7 @@
 import { router } from 'expo-router';
 import { useEffect, useMemo, useRef, useState } from 'react';
-import { Animated, Easing, KeyboardAvoidingView, Platform, ScrollView, Text, View, type ScrollViewInstance } from 'react-native';
+import { KeyboardAvoidingView, Platform, Pressable, ScrollView, Text, View, type ScrollViewInstance } from 'react-native';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { SuccessMark } from '@/ui/motion';
 import type { MemberConflict } from '@/data/api/contract';
 import {
@@ -47,6 +48,7 @@ function conflictText(c: MemberConflict): string {
 
 export default function RegisterScreen() {
   const { repos, session, newId, touch, syncNow, checkMember, files } = useApp();
+  const insets = useSafeAreaInsets();
   const [form, setForm] = useState<RegistrationForm>(EMPTY_FORM);
   const [dobText, setDobText] = useState('');
   const [step, setStep] = useState(0);
@@ -57,10 +59,6 @@ export default function RegisterScreen() {
   const [message, setMessage] = useState<string | null>(null);
   const [saved, setSaved] = useState<RegistrationItem | null>(null);
   const scroller = useRef<ScrollViewInstance>(null);
-  const progress = useRef(new Animated.Value(1 / STEPS.length)).current;
-  useEffect(() => {
-    Animated.timing(progress, { toValue: (step + 1) / STEPS.length, duration: 380, easing: Easing.out(Easing.cubic), useNativeDriver: false }).start();
-  }, [step, progress]);
 
   // The member types last fetched from the server, so the form works without a connection.
   useEffect(() => {
@@ -210,11 +208,11 @@ export default function RegisterScreen() {
           <SuccessMark />
         </View>
         <Card>
-          <Text style={{ fontSize: 15, fontWeight: '700', color: colors.ok }}>Registration saved</Text>
-          <Text style={{ color: colors.text, marginTop: 8, fontSize: 26, fontWeight: '800', letterSpacing: -0.4 }}>{fullName(saved)}</Text>
+          <Text style={{ fontSize: 14, fontWeight: '700', color: colors.ok }}>Registration saved</Text>
+          <Text style={{ color: colors.text, marginTop: 8, fontSize: 22, fontWeight: '700', letterSpacing: -0.4 }}>{fullName(saved)}</Text>
           <Text style={{ color: colors.muted, marginTop: 2 }}>{saved.phone}</Text>
-          <Text style={{ color: colors.muted, marginTop: 12, fontSize: 12 }}>
-            Saved on this phone and sent to the office automatically. The member gets a member number and can transact once the office approves, so do not collect cash for them yet.
+          <Text style={{ color: colors.muted, marginTop: 12, fontSize: 13 }}>
+            Saved and sending to the office. Do not collect cash until they are approved.
           </Text>
           <Text style={{ color: colors.muted, marginTop: 8, fontSize: 12 }}>Ref {saved.localRegistrationId.slice(0, 8).toUpperCase()}</Text>
         </Card>
@@ -228,17 +226,21 @@ export default function RegisterScreen() {
   const last = step === STEPS.length - 1;
 
   return (
-    <KeyboardAvoidingView style={{ flex: 1 }} behavior={Platform.OS === 'ios' ? 'padding' : undefined}>
-      <View style={{ paddingHorizontal: 16, paddingTop: 12, paddingBottom: 8, backgroundColor: colors.bg }}>
-        <Text style={{ color: colors.primary, fontSize: 12, fontWeight: '800', letterSpacing: 0.6 }}>
-          STEP {step + 1} OF {STEPS.length}
-        </Text>
-        <Text style={{ color: colors.text, fontSize: 26, fontWeight: '800', marginTop: 2, letterSpacing: -0.5 }}>{STEPS[step].label}</Text>
-        <View style={{ height: 6, borderRadius: 3, backgroundColor: '#E3E7EE', marginTop: 10, overflow: 'hidden' }}>
-          <Animated.View style={{ height: 6, borderRadius: 3, backgroundColor: colors.primary, width: progress.interpolate({ inputRange: [0, 1], outputRange: ['0%', '100%'] }) }} />
+    <KeyboardAvoidingView style={{ flex: 1, backgroundColor: colors.bg }} behavior={Platform.OS === 'ios' ? 'padding' : undefined}>
+      {/* Where you are: one segment per step, tap a finished one to go back to it */}
+      <View style={{ paddingHorizontal: 16, paddingTop: 8, paddingBottom: 10, gap: 8 }}>
+        <View style={{ flexDirection: 'row', gap: 4 }}>
+          {STEPS.map((x, i) => (
+            <Pressable key={x.id} accessibilityRole="button" accessibilityLabel={`Step ${i + 1}, ${x.label}`} disabled={i >= step} onPress={() => goTo(i)} hitSlop={{ top: 10, bottom: 10 }} style={{ flex: 1, height: 5, borderRadius: 3, backgroundColor: i <= step ? colors.primary : '#DDE2EA', opacity: i < step ? 0.55 : 1 }} />
+          ))}
+        </View>
+        <View style={{ flexDirection: 'row', alignItems: 'baseline', justifyContent: 'space-between' }}>
+          <Text style={{ color: colors.text, fontSize: 20, fontWeight: '700', letterSpacing: -0.3 }}>{STEPS[step].label}</Text>
+          <Text style={{ color: colors.muted, fontSize: 13 }}>{step + 1} / {STEPS.length}</Text>
         </View>
       </View>
-      <ScrollView ref={scroller} contentContainerStyle={{ padding: 16, paddingBottom: 32 }} keyboardShouldPersistTaps="handled">
+
+      <ScrollView ref={scroller} contentContainerStyle={{ padding: 16, paddingTop: 4, paddingBottom: 24 }} keyboardShouldPersistTaps="handled">
         <ProblemBox problems={problems} />
         {message ? <Text style={{ color: colors.danger, marginBottom: 12 }}>{message}</Text> : null}
 
@@ -252,21 +254,19 @@ export default function RegisterScreen() {
         {stepId === 'beneficiaries' ? <BeneficiariesStep {...stepProps} /> : null}
         {stepId === 'alerts' ? <AlertsStep {...stepProps} /> : null}
         {stepId === 'preview' ? <PreviewStep form={form} types={types} branchCode={branchCode} guardianNeeded={guardianNeeded} goTo={goTo} /> : null}
-
-        <View style={{ flexDirection: 'row', gap: 12, marginTop: 20 }}>
-          {step > 0 ? (
-            <View style={{ flex: 1 }}>
-              <Button title="Back" variant="secondary" onPress={() => goTo(step - 1)} />
-            </View>
-          ) : null}
-          <View style={{ flex: 1 }}>
-            {last ? <Button title="Submit registration" onPress={() => void submit()} busy={saving} /> : <Button title="Next" onPress={next} />}
-          </View>
-        </View>
-        <Text style={{ color: colors.muted, fontSize: 12, marginTop: 12 }}>
-          Saved on this phone first, then sent to the office automatically. Nothing is lost if the signal drops.
-        </Text>
       </ScrollView>
+
+      {/* Always in reach, however long the step is */}
+      <View style={{ flexDirection: 'row', gap: 12, paddingHorizontal: 16, paddingTop: 12, paddingBottom: insets.bottom + 12, backgroundColor: colors.card, borderTopWidth: 1, borderTopColor: colors.border }}>
+        {step > 0 ? (
+          <View style={{ flex: 1 }}>
+            <Button title="Back" variant="secondary" onPress={() => goTo(step - 1)} />
+          </View>
+        ) : null}
+        <View style={{ flex: 2 }}>
+          {last ? <Button title="Submit" onPress={() => void submit()} busy={saving} /> : <Button title="Next" onPress={next} />}
+        </View>
+      </View>
     </KeyboardAvoidingView>
   );
 }

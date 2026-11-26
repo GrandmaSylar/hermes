@@ -36,7 +36,7 @@ function Segmented({ value, onChange }: { value: 'today' | 'all'; onChange: (v: 
       onPress={() => onChange(key)}
       style={{ flex: 1, minHeight: 32, alignItems: 'center', justifyContent: 'center', borderRadius: 8, backgroundColor: value === key ? '#FFFFFF' : 'transparent' }}
     >
-      <Text style={{ fontSize: 13, fontWeight: '600', color: value === key ? colors.primaryDeep : 'rgba(255,255,255,0.85)' }}>{label}</Text>
+      <Text style={{ fontSize: 12, fontWeight: '600', color: value === key ? colors.primaryDeep : 'rgba(255,255,255,0.85)' }}>{label}</Text>
     </Pressable>
   );
   return (
@@ -57,8 +57,8 @@ function ActionTile(props: { icon: IconName; title: string; hint: string; onPres
           <Ionicons name={props.icon} size={24} color={fg} />
         </View>
         <View style={{ gap: 2 }}>
-          <Text style={{ fontSize: 17, fontWeight: '700', color: colors.text }}>{props.title}</Text>
-          <Text style={{ fontSize: 13, color: colors.muted }}>{props.hint}</Text>
+          <Text style={{ fontSize: 15, fontWeight: '700', color: colors.text }}>{props.title}</Text>
+          <Text style={{ fontSize: 12, color: colors.muted }}>{props.hint}</Text>
         </View>
       </View>
     </Tappable>
@@ -70,7 +70,7 @@ function StatTile({ icon, label, value }: { icon: IconName; label: string; value
     <View style={{ flex: 1, backgroundColor: colors.card, padding: 14, gap: 8, borderRadius: 16, ...RADIUS, ...shadow }}>
       <Ionicons name={icon} size={20} color={colors.primary} />
       <View>
-        <Text style={{ fontSize: 22, fontWeight: '700', color: colors.text, ...nums }}>{value}</Text>
+        <Text style={{ fontSize: 18, fontWeight: '700', color: colors.text, ...nums }}>{value}</Text>
         <Text style={{ fontSize: 12, color: colors.muted, marginTop: 1 }}>{label}</Text>
       </View>
     </View>
@@ -162,18 +162,18 @@ export default function HomeTab() {
       {/* Who and where */}
       <Reveal style={{ flexDirection: 'row', alignItems: 'center', gap: 12 }}>
         <View style={{ flex: 1, gap: 2 }}>
-          <Text style={{ fontSize: 15, color: colors.muted, fontWeight: '500' }}>{greeting(now)}, {firstName(name)}</Text>
-          <Text selectable numberOfLines={2} style={{ fontSize: 28, fontWeight: '800', color: colors.text, letterSpacing: -0.4 }}>{name || 'Field officer'}</Text>
+          <Text style={{ fontSize: 14, color: colors.muted, fontWeight: '500' }}>{greeting(now)}, {firstName(name)}</Text>
+          <Text selectable numberOfLines={2} style={{ fontSize: 24, fontWeight: '700', color: colors.text, letterSpacing: -0.4 }}>{name || 'Field officer'}</Text>
         </View>
         <View style={{ width: 48, height: 48, borderRadius: 24, backgroundColor: colors.primary, alignItems: 'center', justifyContent: 'center' }}>
-          <Text style={{ color: colors.primaryText, fontSize: 18, fontWeight: '700' }}>{initials(name)}</Text>
+          <Text style={{ color: colors.primaryText, fontSize: 16, fontWeight: '700' }}>{initials(name)}</Text>
         </View>
       </Reveal>
 
       {officeLineText ? (
         <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8, marginTop: -8 }}>
           <Ionicons name="business-outline" size={16} color={colors.muted} />
-          <Text selectable numberOfLines={2} style={{ flex: 1, fontSize: 14, color: colors.muted }}>{officeLineText}</Text>
+          <Text selectable numberOfLines={2} style={{ flex: 1, fontSize: 13, color: colors.muted }}>{officeLineText}</Text>
         </View>
       ) : null}
 
@@ -192,20 +192,20 @@ export default function HomeTab() {
       >
         <Segmented value={range} onChange={setRange} />
         <View style={{ gap: 4 }}>
-          <Text style={{ fontSize: 13, color: 'rgba(255,255,255,0.8)', fontWeight: '500' }}>Cash recorded {range === 'today' ? 'today' : 'in total'}</Text>
-          <Text selectable adjustsFontSizeToFit numberOfLines={1} style={{ fontSize: 38, fontWeight: '800', color: '#FFFFFF', letterSpacing: -0.8, ...nums }}>{ghs(shown.amount)}</Text>
+          <Text style={{ fontSize: 12, color: 'rgba(255,255,255,0.8)', fontWeight: '500' }}>Cash {range === 'today' ? 'today' : 'in total'}</Text>
+          <Text selectable adjustsFontSizeToFit numberOfLines={1} style={{ fontSize: 30, fontWeight: '700', color: '#FFFFFF', letterSpacing: -0.8, ...nums }}>{ghs(shown.amount)}</Text>
         </View>
         <View style={{ flexDirection: 'row', gap: 24 }}>
           <View>
-            <Text style={{ fontSize: 20, fontWeight: '700', color: '#FFFFFF', ...nums }}>{shown.count}</Text>
+            <Text style={{ fontSize: 17, fontWeight: '700', color: '#FFFFFF', ...nums }}>{shown.count}</Text>
             <Text style={{ fontSize: 12, color: 'rgba(255,255,255,0.8)' }}>{shown.count === 1 ? 'deposit' : 'deposits'}</Text>
           </View>
           <View>
-            <Text style={{ fontSize: 20, fontWeight: '700', color: '#FFFFFF', ...nums }}>{figures.waitingToSync}</Text>
+            <Text style={{ fontSize: 17, fontWeight: '700', color: '#FFFFFF', ...nums }}>{figures.waitingToSync}</Text>
             <Text style={{ fontSize: 12, color: 'rgba(255,255,255,0.8)' }}>waiting to sync</Text>
           </View>
           <View>
-            <Text style={{ fontSize: 20, fontWeight: '700', color: '#FFFFFF', ...nums }}>{figures.awaitingOffice}</Text>
+            <Text style={{ fontSize: 17, fontWeight: '700', color: '#FFFFFF', ...nums }}>{figures.awaitingOffice}</Text>
             <Text style={{ fontSize: 12, color: 'rgba(255,255,255,0.8)' }}>with the office</Text>
           </View>
         </View>
@@ -217,7 +217,7 @@ export default function HomeTab() {
           <View style={{ flexDirection: 'row', alignItems: 'center', gap: 12, padding: 14, backgroundColor: colors.dangerBg, borderRadius: 16, ...RADIUS }}>
             <Ionicons name="alert-circle" size={22} color={colors.danger} />
             <Text style={{ flex: 1, color: colors.danger, fontWeight: '600' }}>
-              {figures.needAttention} {figures.needAttention === 1 ? 'deposit was' : 'deposits were'} refused. Tap to see why.
+              {figures.needAttention} {figures.needAttention === 1 ? 'deposit' : 'deposits'} refused
             </Text>
             <Ionicons name="chevron-forward" size={18} color={colors.danger} />
           </View>
@@ -226,11 +226,11 @@ export default function HomeTab() {
 
       {/* Actions */}
       <Reveal index={2} style={{ flexDirection: 'row', gap: 12 }}>
-        <ActionTile icon="cash-outline" title="Take a deposit" hint="Choose a member, enter the amount" tone="blue" onPress={() => router.navigate({ pathname: '/members', params: { mode: 'deposit' } })} />
+        <ActionTile icon="cash-outline" title="Take a deposit" hint="Savings or shares" tone="blue" onPress={() => router.navigate({ pathname: '/members', params: { mode: 'deposit' } })} />
         <ActionTile
           icon="person-add-outline"
           title="Register member"
-          hint={capabilities.registration ? 'New member with KYC' : 'Not available yet'}
+          hint={capabilities.registration ? 'With KYC' : 'Not available'}
           tone="green"
           disabled={!capabilities.registration}
           onPress={() => router.push('/register')}
@@ -248,11 +248,11 @@ export default function HomeTab() {
       <Reveal index={4} style={{ gap: 8 }}>
         <View style={{ flexDirection: 'row', alignItems: 'baseline', justifyContent: 'space-between', paddingHorizontal: 4 }}>
           <View>
-            <Text style={{ fontSize: 20, fontWeight: '700', color: colors.text }}>Today</Text>
-            <Text style={{ fontSize: 13, color: colors.muted }}>{dayLabel(today)}</Text>
+            <Text style={{ fontSize: 17, fontWeight: '700', color: colors.text }}>Today</Text>
+            <Text style={{ fontSize: 12, color: colors.muted }}>{dayLabel(today)}</Text>
           </View>
           <Pressable accessibilityRole="link" onPress={() => router.push('/history')} hitSlop={10}>
-            <Text style={{ color: colors.primary, fontSize: 15, fontWeight: '500' }}>History</Text>
+            <Text style={{ color: colors.primary, fontSize: 14, fontWeight: '500' }}>History</Text>
           </Pressable>
         </View>
         <View style={{ backgroundColor: colors.card, borderRadius: 20, overflow: 'hidden', ...RADIUS, ...shadow }}>
@@ -264,8 +264,8 @@ export default function HomeTab() {
           ) : recent.length === 0 ? (
             <View style={{ padding: 28, alignItems: 'center', gap: 8 }}>
               <Ionicons name="today-outline" size={32} color={colors.muted} />
-              <Text style={{ fontSize: 16, fontWeight: '600', color: colors.text }}>Nothing recorded today</Text>
-              <Text style={{ fontSize: 14, color: colors.muted, textAlign: 'center' }}>Deposits and registrations you record today show up here, even before they reach the office.</Text>
+              <Text style={{ fontSize: 15, fontWeight: '600', color: colors.text }}>Nothing recorded today</Text>
+              <Text style={{ fontSize: 13, color: colors.muted, textAlign: 'center' }}>Today's deposits and registrations appear here.</Text>
             </View>
           ) : (
             recent.map((e, i) =>
@@ -278,8 +278,8 @@ export default function HomeTab() {
           )}
         </View>
         {entries.length > recent.length ? (
-          <Text style={{ fontSize: 13, color: colors.muted, paddingHorizontal: 4 }}>
-            {entries.length - recent.length} more today. Open History to see everything.
+          <Text style={{ fontSize: 12, color: colors.muted, paddingHorizontal: 4 }}>
+            +{entries.length - recent.length} more in History
           </Text>
         ) : null}
       </Reveal>
@@ -289,8 +289,8 @@ export default function HomeTab() {
         <View style={{ flexDirection: 'row', alignItems: 'center', gap: 12, padding: 14, backgroundColor: colors.card, borderRadius: 16, ...RADIUS, ...shadow }}>
           <Ionicons name={syncing ? 'sync' : 'cloud-done-outline'} size={22} color={colors.primary} />
           <View style={{ flex: 1 }}>
-            <Text style={{ fontSize: 15, fontWeight: '600', color: colors.text }}>{syncing ? 'Syncing…' : ago(lastSyncAt ?? pulledAt, now)}</Text>
-            <Text style={{ fontSize: 13, color: note ? colors.warn : colors.muted }}>{note || 'Pull down or tap to sync now'}</Text>
+            <Text style={{ fontSize: 14, fontWeight: '600', color: colors.text }}>{syncing ? 'Syncing…' : ago(lastSyncAt ?? pulledAt, now)}</Text>
+            <Text style={{ fontSize: 12, color: note ? colors.warn : colors.muted }}>{note || 'Tap to sync now'}</Text>
           </View>
           <Ionicons name="refresh" size={18} color={colors.muted} />
         </View>
