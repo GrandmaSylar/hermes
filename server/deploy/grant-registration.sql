@@ -7,6 +7,7 @@ GO
 
 -- Member types shown on the form
 GRANT SELECT ON dbo.CustomerType TO hermes_field;
+GRANT SELECT ON dbo.OrganizationSettings TO hermes_field;           -- the credit union logo shown on receipts
 GRANT SELECT ON dbo.Branch TO hermes_field;                         -- the branch and credit union names shown on the home screen
 
 -- The member and everything that belongs to them. Only new rows: no UPDATE, no DELETE.

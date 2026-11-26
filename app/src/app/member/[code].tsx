@@ -96,7 +96,7 @@ export default function MemberScreen() {
             <Avatar name={member.name} size={72} tone="soft" />
           </View>
           <Text selectable style={{ fontSize: 24, fontWeight: '800', color: '#FFFFFF', letterSpacing: -0.4, textAlign: 'center', marginTop: 6 }}>{member.name}</Text>
-          <Text selectable style={{ color: 'rgba(255,255,255,0.85)', fontSize: 14 }}>{member.memberCode} · {member.phone}</Text>
+          <Text selectable style={{ color: 'rgba(255,255,255,0.85)', fontSize: 14 }}>{[member.memberCode, member.phone].filter(Boolean).join(' · ')}</Text>
           {!active ? (
             <View style={{ marginTop: 8, paddingHorizontal: 12, paddingVertical: 4, borderRadius: 999, backgroundColor: colors.warnBg }}>
               <Text style={{ color: colors.warn, fontWeight: '700', fontSize: 12 }}>{member.status === 'INACTIVE' ? 'Inactive' : 'Awaiting approval'}</Text>

@@ -138,3 +138,18 @@ describe('KYC pictures over HTTP', () => {
     await expect(api.uploadDocument(session, '1000004762', upload)).rejects.toMatchObject({ kind: 'SERVER' });
   });
 });
+
+describe('credit union logo over HTTP', () => {
+  test('is downloaded once, then reported unchanged, and null when there is none', async () => {
+    const answers = [
+      { status: 200, body: { version: 'v1', dataUri: 'data:image/png;base64,AAAA' } },
+      { status: 200, body: { version: 'v1', dataUri: null, unchanged: true } },
+      { status: 200, body: { version: null, dataUri: null } },
+    ];
+    const { api, calls } = make({ 'GET /v1/credit-union/logo': () => answers.shift()! });
+    expect(await api.fetchLogo(session, null)).toEqual({ version: 'v1', dataUri: 'data:image/png;base64,AAAA' });
+    expect(await api.fetchLogo(session, 'v1')).toBe('UNCHANGED');
+    expect(await api.fetchLogo(session, 'v1')).toBeNull();
+    expect(calls).toHaveLength(3);
+  });
+});

@@ -362,6 +362,16 @@ export class HttpApi implements ApiClient {
       : null;
   }
 
+  async fetchLogo(session: Session, have: string | null) {
+    const query = have ? `?have=${encodeURIComponent(have)}` : '';
+    const body = asRecord(await this.send(session, 'GET', `${V1}/credit-union/logo${query}`));
+    const version = asText(body.version);
+    if (!version) return null;
+    if (body.unchanged === true) return 'UNCHANGED' as const;
+    const dataUri = asText(body.dataUri);
+    return dataUri ? { version, dataUri } : null;
+  }
+
   async pushRegistrations(session: Session, items: PushRegistration[]): Promise<RegistrationResult[]> {
     const results: RegistrationResult[] = [];
     for (const item of items) results.push(await this.registerOne(session, item));

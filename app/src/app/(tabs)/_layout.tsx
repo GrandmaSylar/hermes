@@ -30,8 +30,8 @@ export default function TabsLayout() {
       }}
     >
       <Tabs.Screen name="index" options={{ title: 'Home', headerShown: false, tabBarIcon: icon('home', 'home-outline') }} />
-      <Tabs.Screen name="members" options={{ title: 'Members', tabBarIcon: icon('people', 'people-outline') }} />
-      <Tabs.Screen name="sync" options={{ title: 'Sync', tabBarIcon: icon('sync-circle', 'sync-circle-outline') }} />
+      <Tabs.Screen name="members" options={{ title: 'Members', headerShown: false, tabBarIcon: icon('people', 'people-outline') }} />
+      <Tabs.Screen name="sync" options={{ title: 'Sync', headerShown: false, tabBarIcon: icon('sync-circle', 'sync-circle-outline') }} />
     </Tabs>
   );
 }

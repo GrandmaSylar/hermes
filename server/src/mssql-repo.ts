@@ -6,6 +6,7 @@ import type {
   AccountInfo,
   AccountOption,
   BranchInfo,
+  CreditUnionLogo,
   DepositInput,
   DepositKind,
   DepositRow,
@@ -22,7 +23,7 @@ import type { Config } from './config';
 import { smsPhone } from './sms';
 import * as registration from './mssql-registration';
 import * as documents from './mssql-documents';
-import type { CheckedDocument } from './documents';
+import { logoFrom, type CheckedDocument } from './documents';
 import type { RegistrationBody } from './registration';
 import { buildSchema, describe as describeSchema, has, nameExpr, pick, product, TABLES, type Schema } from './schema';
 
@@ -135,6 +136,24 @@ export class MssqlRepo implements Repo {
          ORDER BY ${byStaff ? 'CASE WHEN EmployeeID = @u THEN 0 ELSE 1 END, ' : ''}FieldOfficerID`,
       );
     return result.recordset[0] ? this.officerFrom(result.recordset[0]) : null;
+  }
+
+  async getLogo(branchCode: string): Promise<CreditUnionLogo | null> {
+    if (!has(this.schema, 'OrganizationSettings.LogoData') || !has(this.schema, 'OrganizationSettings.BranchCode')) return null;
+    try {
+      // The officer's own branch first, then the shared "CUA" settings, then any.
+      const result = await this.pool
+        .request()
+        .input('b', sql.VarChar(10), branchCode)
+        .query(
+          `SELECT TOP 1 CAST(LogoData AS nvarchar(max)) AS LogoData FROM dbo.OrganizationSettings
+           WHERE LogoData IS NOT NULL AND LEN(LogoData) > 0
+           ORDER BY CASE WHEN LTRIM(RTRIM(BranchCode)) = @b THEN 0 WHEN LTRIM(RTRIM(BranchCode)) = 'CUA' THEN 1 ELSE 2 END`,
+        );
+      return logoFrom(result.recordset[0]?.LogoData);
+    } catch {
+      return null;
+    }
   }
 
   async getBranchInfo(branchCode: string): Promise<BranchInfo | null> {

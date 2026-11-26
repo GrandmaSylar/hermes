@@ -230,6 +230,14 @@ export function buildApp(deps: AppDeps): FastifyInstance {
     };
   });
 
+  // The credit union's logo, for the receipt. The phone says which version it already has, so it is only sent when it changed.
+  app.get('/v1/credit-union/logo', { preHandler: requireOfficer }, async (req) => {
+    const have = typeof (req.query as { have?: unknown }).have === 'string' ? (req.query as { have: string }).have : '';
+    const logo = await repo.getLogo(req.officer!.branchCode);
+    if (!logo) return { version: null, dataUri: null };
+    return have === logo.version ? { version: logo.version, dataUri: null, unchanged: true } : logo;
+  });
+
   app.get('/v1/members', { preHandler: requireOfficer }, async (req, reply) => {
     const parsed = membersQuery.safeParse(req.query);
     if (!parsed.success) return fail(reply, 400, 'Invalid paging parameters.');

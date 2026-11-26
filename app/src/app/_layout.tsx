@@ -31,7 +31,7 @@ function Screens() {
       <Stack.Protected guard={signedIn}>
         <Stack.Screen name="(tabs)" options={{ headerShown: false }} />
         <Stack.Screen name="member/[code]" options={{ title: 'Member' }} />
-        <Stack.Screen name="collect/[code]" options={{ title: 'Deposit', animation: 'fade_from_bottom' }} />
+        <Stack.Screen name="collect/[code]" options={{ title: '', animation: 'fade_from_bottom' }} />
         <Stack.Screen name="register" options={{ title: 'Register member', animation: 'fade_from_bottom' }} />
         <Stack.Screen name="history" options={{ title: 'Activity history', headerBackButtonDisplayMode: 'minimal' }} />
       </Stack.Protected>

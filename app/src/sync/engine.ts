@@ -55,6 +55,8 @@ const KV_ACCOUNTS_CURSOR = 'accounts.cursor';
 const KV_DECISIONS_SINCE = 'decisions.since';
 /** The member types the registration form offers, as last fetched (JSON). */
 export const KV_OFFICE = 'office.profile';
+export const KV_LOGO = 'office.logo';
+export const KV_LOGO_VERSION = 'office.logoVersion';
 export const KV_MEMBER_TYPES = 'registration.memberTypes';
 /** Look back this far before the last check, so a decision made while the phone was asking is not missed. */
 const DECISION_OVERLAP_MS = 10 * 60 * 1000;
@@ -201,12 +203,28 @@ function toPushRegistration(r: RegistrationItem & { payload: NonNullable<Registr
   return { ...r.payload, localRegistrationId: r.localRegistrationId, capturedAt: r.capturedAt };
 }
 
+/** Keeps the credit union logo on the phone for receipts, downloading it only when it has changed. A failure changes nothing. */
+async function refreshLogo(deps: SyncDeps): Promise<void> {
+  const { repos, api, session } = deps;
+  try {
+    const have = await repos.kv.get(KV_LOGO_VERSION);
+    const logo = await api.fetchLogo?.(session, have);
+    if (logo && logo !== 'UNCHANGED') {
+      await repos.kv.set(KV_LOGO, logo.dataUri);
+      await repos.kv.set(KV_LOGO_VERSION, logo.version);
+    }
+  } catch (error) {
+    if (error instanceof ApiError && error.kind === 'AUTH') throw error;
+  }
+}
+
 /** Asks the server whether registration is on, and keeps its member types for the form to use offline. A failure changes nothing. */
 async function refreshRegistration(deps: SyncDeps): Promise<void> {
   const { repos, api, session } = deps;
   try {
     await api.refreshCapabilities?.(session);
     if (api.office) await repos.kv.set(KV_OFFICE, JSON.stringify(api.office));
+    await refreshLogo(deps);
     if (api.capabilities.registration) {
       const types = await api.memberTypes(session);
       if (types.length > 0) await repos.kv.set(KV_MEMBER_TYPES, JSON.stringify(types));

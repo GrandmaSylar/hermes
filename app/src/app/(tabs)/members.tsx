@@ -23,7 +23,7 @@ function MemberRow({ member, index }: { member: Member; index: number }) {
               <Text numberOfLines={1} style={{ flexShrink: 1, fontSize: 16, color: colors.text, fontWeight: '700' }}>{member.name}</Text>
               {member.myCustomer ? <Ionicons name="star" size={14} color="#F5A623" /> : null}
             </View>
-            <Text numberOfLines={1} style={{ color: colors.muted, fontSize: 13 }}>{member.memberCode} · {member.phone}</Text>
+            <Text numberOfLines={1} style={{ color: colors.muted, fontSize: 13 }}>{[member.memberCode, member.phone].filter(Boolean).join(' · ')}</Text>
             {status ? (
               <View style={{ alignSelf: 'flex-start', marginTop: 4, paddingHorizontal: 8, paddingVertical: 2, borderRadius: 999, backgroundColor: colors.warnBg }}>
                 <Text style={{ fontSize: 11, fontWeight: '700', color: colors.warn }}>{status}</Text>

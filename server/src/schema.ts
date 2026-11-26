@@ -35,6 +35,7 @@ export const TABLES = [
   'SMSHistory',
   'AppSettings',
   'Branch',
+  'OrganizationSettings',
   'CustomerContact',
   'CustomerAlertPreferences',
   'MobileTransactionRejection',

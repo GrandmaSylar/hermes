@@ -271,4 +271,14 @@ describe('member types, duplicate check and capability', () => {
     const none = await app.inject({ method: 'GET', url: '/v1/me', headers: { authorization: auth } });
     expect(none.json().branch).toBeNull();
   });
+
+  test('the logo is sent once, then only when it changes', async () => {
+    const first = await app.inject({ method: 'GET', url: '/v1/credit-union/logo', headers: { authorization: auth } });
+    expect(first.json()).toEqual({ version: 'v1', dataUri: 'data:image/png;base64,AAAA' });
+    const again = await app.inject({ method: 'GET', url: '/v1/credit-union/logo?have=v1', headers: { authorization: auth } });
+    expect(again.json()).toEqual({ version: 'v1', dataUri: null, unchanged: true });
+    repo.logo = null;
+    const none = await app.inject({ method: 'GET', url: '/v1/credit-union/logo', headers: { authorization: auth } });
+    expect(none.json()).toEqual({ version: null, dataUri: null });
+  });
 });
