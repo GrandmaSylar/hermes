@@ -16,3 +16,9 @@ export const colors = {
   warn: '#B45309',
   warnBg: '#FFF1DB',
 };
+
+/** The Ghana Co-operative Credit Unions Association logo's own colours: its navy, and the red of the Ghana map. */
+export const brand = { navy: '#03305C', blue: '#2D5F87', red: '#EA3137' };
+
+/** The navy gradient, for hero cards and the sign-in screen. */
+export const brandGradient = (angle = 150) => `linear-gradient(${angle}deg, ${brand.navy}, ${brand.blue})`;

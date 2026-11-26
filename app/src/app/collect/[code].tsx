@@ -22,6 +22,8 @@ import { useApp } from '@/state/AppProvider';
 import { captureCollection } from '@/sync/capture';
 import { Reveal, SuccessMark } from '@/ui/motion';
 import { Receipt, useBrand } from '@/ui/receipt';
+import { Watermark } from '@/ui/brand';
+import { brand as palette, brandGradient } from '@/ui/colors';
 import { Button, Card, Field, RADIUS, colors } from '@/ui/theme';
 import { AccountChooser, ConfirmDepositModal, PaymentModeChooser } from '@/ui/deposit-parts';
 
@@ -214,11 +216,13 @@ export default function DepositScreen() {
                 padding: 18,
                 gap: 4,
                 borderRadius: 22,
-                backgroundColor: colors.primary,
-                experimental_backgroundImage: `linear-gradient(150deg, ${colors.primary}, ${colors.primaryDeep})`,
+                backgroundColor: palette.navy,
+                overflow: 'hidden',
+                experimental_backgroundImage: brandGradient(150),
                 ...RADIUS,
               }}
             >
+              <Watermark size={150} />
               <Text style={{ color: 'rgba(255,255,255,0.8)', fontSize: 12, fontWeight: '700', letterSpacing: 0.6 }}>EXPECTED BALANCE AFTER APPROVAL</Text>
               <Text selectable style={{ color: '#FFFFFF', fontSize: 26, fontWeight: '700', letterSpacing: -0.6, fontVariant: ['tabular-nums'] }}>GHS {formatAmount(expected)}</Text>
               <Text style={{ color: 'rgba(255,255,255,0.8)', fontSize: 12, marginTop: 4 }}>

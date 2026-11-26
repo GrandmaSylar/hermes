@@ -2,6 +2,7 @@ import { Ionicons } from '@expo/vector-icons';
 import { Redirect } from 'expo-router';
 import { Text, View } from 'react-native';
 import { useApp } from '@/state/AppProvider';
+import { CuaEmblem } from '@/ui/brand';
 import { BrandLoader, Reveal } from '@/ui/motion';
 import { colors } from '@/ui/theme';
 
@@ -11,10 +12,13 @@ export default function Index() {
 
   if (status === 'loading') {
     return (
-      <View style={{ flex: 1, alignItems: 'center', justifyContent: 'center', gap: 20, backgroundColor: colors.bg }}>
-        <BrandLoader />
-        <Reveal>
-          <Text style={{ color: colors.muted, fontSize: 14, fontWeight: '500' }}>Opening QSS Mobile Banking</Text>
+      <View style={{ flex: 1, alignItems: 'center', justifyContent: 'center', gap: 20, backgroundColor: '#FFFFFF' }}>
+        <BrandLoader size={150}>
+          <CuaEmblem size={96} />
+        </BrandLoader>
+        <Reveal style={{ alignItems: 'center', gap: 4 }}>
+          <Text style={{ color: '#03305C', fontSize: 18, fontWeight: '700', letterSpacing: -0.3 }}>QSS Mobile Banking</Text>
+          <Text style={{ color: '#EA3137', fontSize: 13, fontStyle: 'italic', fontWeight: '600' }}>...building a happy family</Text>
         </Reveal>
       </View>
     );

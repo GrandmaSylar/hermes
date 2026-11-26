@@ -1,11 +1,14 @@
 import { Ionicons } from '@expo/vector-icons';
+import { Image } from 'expo-image';
 import { Redirect } from 'expo-router';
+import { StatusBar } from 'expo-status-bar';
 import { useState } from 'react';
 import { KeyboardAvoidingView, Platform, ScrollView, Text, View } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { ApiError } from '@/data/api/contract';
 import { useApp } from '@/state/AppProvider';
 import { Reveal, tap } from '@/ui/motion';
+import { brand, brandGradient } from '@/ui/colors';
 import { Button, Field, RADIUS, colors } from '@/ui/theme';
 
 type Step = 'password' | 'otp';
@@ -78,37 +81,19 @@ export default function Login() {
   };
 
   return (
-    <KeyboardAvoidingView style={{ flex: 1, backgroundColor: colors.bg }} behavior={Platform.OS === 'ios' ? 'padding' : undefined}>
-      <ScrollView contentContainerStyle={{ flexGrow: 1 }} keyboardShouldPersistTaps="handled" bounces={false}>
-        {/* Brand header */}
-        <View
-          style={{
-            paddingTop: insets.top + 48,
-            paddingBottom: 84,
-            paddingHorizontal: 28,
-            gap: 14,
-            backgroundColor: colors.primary,
-            experimental_backgroundImage: `linear-gradient(160deg, ${colors.primary}, ${colors.primaryDeep})`,
-            borderBottomLeftRadius: 36,
-            borderBottomRightRadius: 36,
-            ...RADIUS,
-          }}
-        >
-          <Reveal>
-            <View style={{ width: 64, height: 64, borderRadius: 20, backgroundColor: 'rgba(255,255,255,0.18)', alignItems: 'center', justifyContent: 'center', borderWidth: 1, borderColor: 'rgba(255,255,255,0.3)', ...RADIUS }}>
-              <Ionicons name="wallet" size={32} color="#FFFFFF" />
-            </View>
+    <View style={{ flex: 1, backgroundColor: brand.navy, experimental_backgroundImage: brandGradient(135) }}>
+      <StatusBar style="light" />
+      <KeyboardAvoidingView style={{ flex: 1 }} behavior={Platform.OS === 'ios' ? 'padding' : undefined}>
+        <ScrollView contentContainerStyle={{ flexGrow: 1, justifyContent: 'center', paddingTop: insets.top + 24, paddingBottom: insets.bottom + 24, paddingHorizontal: 20, gap: 24 }} keyboardShouldPersistTaps="handled">
+          {/* QSS Core Banking brand */}
+          <Reveal style={{ alignItems: 'center', gap: 6 }}>
+            <Image source={require('../../assets/qss-logo.png')} contentFit="contain" accessibilityLabel="QSS Core Banking logo" style={{ width: 132, height: 132 }} />
+            <Text style={{ fontSize: 26, fontWeight: '700', color: '#FFFFFF', letterSpacing: -0.6, textAlign: 'center' }}>QSS Core Banking</Text>
+            <Text style={{ fontSize: 15, color: 'rgba(255,255,255,0.82)', textAlign: 'center', fontWeight: '300' }}>Mobile banking for credit union field officers</Text>
           </Reveal>
-          <Reveal index={1}>
-            <Text style={{ fontSize: 26, fontWeight: '700', color: '#FFFFFF', letterSpacing: -0.6 }}>QSS Mobile Banking</Text>
-            <Text style={{ fontSize: 15, color: 'rgba(255,255,255,0.82)', marginTop: 4 }}>Field collections and member registration</Text>
-          </Reveal>
-        </View>
 
-        {/* Form card, overlapping the header */}
-        <View style={{ paddingHorizontal: 16, marginTop: -48, paddingBottom: insets.bottom + 24, gap: 16 }}>
-          <Reveal index={2} from={24}>
-            <View style={{ backgroundColor: colors.card, borderRadius: 28, padding: 22, ...RADIUS, boxShadow: '0 12px 32px rgba(16, 24, 40, 0.12)' }}>
+          <Reveal index={1} from={24}>
+            <View style={{ backgroundColor: colors.card, borderRadius: 28, padding: 22, ...RADIUS, boxShadow: '0 16px 40px rgba(0, 0, 0, 0.28)' }}>
               {apiMode === 'mock' ? (
                 <View style={{ backgroundColor: colors.warnBg, padding: 12, borderRadius: 12, marginBottom: 18 }}>
                   <Text style={{ color: colors.warn, fontSize: 12 }}>Demo mode. Nothing reaches the office.</Text>
@@ -155,10 +140,10 @@ export default function Login() {
           </Reveal>
 
           {__DEV__ && apiMode === 'mock' && status !== 'locked' ? (
-            <Text style={{ color: colors.muted, fontSize: 12, textAlign: 'center' }}>Development mock: staff ID FO001, password Passw0rd!, code 123456.</Text>
+            <Text style={{ color: 'rgba(255,255,255,0.7)', fontSize: 12, textAlign: 'center' }}>Development mock: staff ID FO001, password Passw0rd!, code 123456.</Text>
           ) : null}
-        </View>
-      </ScrollView>
-    </KeyboardAvoidingView>
+        </ScrollView>
+      </KeyboardAvoidingView>
+    </View>
   );
 }

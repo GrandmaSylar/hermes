@@ -8,6 +8,8 @@ import { formatAmount } from '@/domain/money';
 import type { Member } from '@/domain/types';
 import { useApp } from '@/state/AppProvider';
 import { PressScale, Reveal, Skeleton, tap } from '@/ui/motion';
+import { Watermark } from '@/ui/brand';
+import { brand, brandGradient } from '@/ui/colors';
 import { Avatar, Button, Card, RADIUS, SectionLabel, balanceText, colors } from '@/ui/theme';
 
 type IconName = React.ComponentProps<typeof Ionicons>['name'];
@@ -86,12 +88,14 @@ export default function MemberScreen() {
             gap: 6,
             padding: 24,
             borderRadius: 28,
-            backgroundColor: colors.primary,
-            experimental_backgroundImage: `linear-gradient(150deg, ${colors.primary}, ${colors.primaryDeep})`,
-            boxShadow: '0 10px 28px rgba(13, 71, 161, 0.28)',
+            backgroundColor: brand.navy,
+            overflow: 'hidden',
+            experimental_backgroundImage: brandGradient(150),
+            boxShadow: '0 10px 28px rgba(3, 48, 92, 0.32)',
             ...RADIUS,
           }}
         >
+          <Watermark size={200} />
           <View style={{ padding: 4, borderRadius: 40, backgroundColor: 'rgba(255,255,255,0.25)' }}>
             <Avatar name={member.name} size={72} tone="soft" />
           </View>
