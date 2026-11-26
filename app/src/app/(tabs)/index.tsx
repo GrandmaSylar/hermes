@@ -13,6 +13,7 @@ import { KV_OFFICE, KV_PULLED_AT } from '@/sync/engine';
 import { DepositRow, RADIUS, RegistrationRow, Tappable, nums, shadow } from '@/ui/activity-rows';
 import { PressScale, Reveal, SkeletonRow } from '@/ui/motion';
 import { AccountMenu } from '@/ui/account-menu';
+import { EmptyState } from '@/ui/states';
 import { Watermark } from '@/ui/brand';
 import { brand, brandGradient } from '@/ui/colors';
 import { colors } from '@/ui/theme';
@@ -208,7 +209,7 @@ export default function HomeTab() {
       </Reveal>
 
       {figures.needAttention > 0 ? (
-        <Tappable onPress={() => router.push('/history')} label="Items need attention">
+        <Tappable onPress={() => router.navigate('/activity')} label="Items need attention">
           <View style={{ flexDirection: 'row', alignItems: 'center', gap: 12, padding: 14, backgroundColor: colors.dangerBg, borderRadius: 16, ...RADIUS }}>
             <Ionicons name="alert-circle" size={22} color={colors.danger} />
             <Text style={{ flex: 1, color: colors.danger, fontWeight: '600' }}>
@@ -246,8 +247,8 @@ export default function HomeTab() {
             <Text style={{ fontSize: 17, fontWeight: '700', color: colors.text }}>Today</Text>
             <Text style={{ fontSize: 12, color: colors.muted }}>{dayLabel(today)}</Text>
           </View>
-          <Pressable accessibilityRole="link" onPress={() => router.push('/history')} hitSlop={10}>
-            <Text style={{ color: colors.primary, fontSize: 14, fontWeight: '500' }}>History</Text>
+          <Pressable accessibilityRole="link" onPress={() => router.navigate('/activity')} hitSlop={10}>
+            <Text style={{ color: colors.primary, fontSize: 14, fontWeight: '500' }}>See all</Text>
           </Pressable>
         </View>
         <View style={{ backgroundColor: colors.card, borderRadius: 20, overflow: 'hidden', ...RADIUS, ...shadow }}>
@@ -257,11 +258,7 @@ export default function HomeTab() {
               <SkeletonRow />
             </>
           ) : recent.length === 0 ? (
-            <View style={{ padding: 28, alignItems: 'center', gap: 8 }}>
-              <Ionicons name="today-outline" size={32} color={colors.muted} />
-              <Text style={{ fontSize: 15, fontWeight: '600', color: colors.text }}>Nothing recorded today</Text>
-              <Text style={{ fontSize: 13, color: colors.muted, textAlign: 'center' }}>Today's deposits and registrations appear here.</Text>
-            </View>
+            <EmptyState icon="today-outline" title="Nothing recorded today" body="Today's deposits and registrations appear here." />
           ) : (
             recent.map((e, i) =>
               e.deposit ? (
@@ -274,7 +271,7 @@ export default function HomeTab() {
         </View>
         {entries.length > recent.length ? (
           <Text style={{ fontSize: 12, color: colors.muted, paddingHorizontal: 4 }}>
-            +{entries.length - recent.length} more in History
+            +{entries.length - recent.length} more in Activity
           </Text>
         ) : null}
       </Reveal>

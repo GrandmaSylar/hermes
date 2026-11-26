@@ -1,6 +1,7 @@
 import { Ionicons } from '@expo/vector-icons';
-import React, { useMemo, useState } from 'react';
-import { FlatList, Modal, Pressable, Switch, Text, TextInput, View, type TextInputProps } from 'react-native';
+import React, { useState } from 'react';
+import { Pressable, Switch, Text, TextInput, View, type TextInputProps } from 'react-native';
+import { Dropdown } from '@/ui/dropdown';
 import { colors } from '@/ui/theme';
 
 /** Building blocks for the member registration form. */
@@ -125,7 +126,7 @@ export function ChoiceField(props: {
   );
 }
 
-/** A longer list picked from a sheet that slides up, with a search box when the list is long. */
+/** A pick-one list. Short lists drop down under the field; long ones open as a searchable sheet (see Dropdown). */
 export function SelectField(props: {
   label: string;
   value: string;
@@ -137,110 +138,7 @@ export function SelectField(props: {
   placeholder?: string;
   disabled?: boolean;
 }) {
-  const [open, setOpen] = useState(false);
-  const [filter, setFilter] = useState('');
-  const shown = useMemo(() => {
-    const f = filter.trim().toLowerCase();
-    return f ? props.options.filter((o) => o.label.toLowerCase().includes(f)) : props.options;
-  }, [filter, props.options]);
-  const current = props.options.find((o) => o.value === props.value);
-  const searchable = props.options.length > 12;
-
-  const close = () => {
-    setOpen(false);
-    setFilter('');
-  };
-
-  return (
-    <View style={{ marginBottom: 14 }}>
-      <Required label={props.label} required={props.required} />
-      <Pressable
-        accessibilityRole="button"
-        accessibilityLabel={props.label}
-        disabled={props.disabled}
-        onPress={() => setOpen(true)}
-        style={{
-          minHeight: 52,
-          borderWidth: 1.5,
-          borderColor: props.error ? colors.danger : colors.fill,
-          borderRadius: 14,
-          borderCurve: 'continuous',
-          paddingHorizontal: 14,
-          flexDirection: 'row',
-          alignItems: 'center',
-          justifyContent: 'space-between',
-          backgroundColor: colors.fill,
-          opacity: props.disabled ? 0.5 : 1,
-        }}
-      >
-        <Text style={{ fontSize: 15, color: current ? colors.text : colors.muted }}>
-          {current ? current.label : props.placeholder ?? 'Choose'}
-        </Text>
-        <Ionicons name="chevron-down" size={18} color={colors.muted} />
-      </Pressable>
-      <Help error={props.error} help={props.help} />
-
-      <Modal visible={open} transparent animationType="slide" onRequestClose={close}>
-        <Pressable style={{ flex: 1, backgroundColor: 'rgba(16,24,40,0.45)' }} onPress={close} />
-        <View style={{ maxHeight: '72%', backgroundColor: colors.card, borderTopLeftRadius: 28, borderTopRightRadius: 28, paddingTop: 10, borderCurve: 'continuous' }}>
-          <View style={{ alignSelf: 'center', width: 40, height: 5, borderRadius: 3, backgroundColor: colors.grabber, marginBottom: 12 }} />
-          <Text style={{ fontSize: 16, fontWeight: '700', color: colors.text, paddingHorizontal: 20, paddingBottom: 10, letterSpacing: -0.2 }}>{props.label}</Text>
-          {searchable ? (
-            <TextInput
-              value={filter}
-              onChangeText={setFilter}
-              placeholder="Search"
-              placeholderTextColor={colors.muted}
-              autoCorrect={false}
-              style={{
-                marginHorizontal: 16,
-                marginBottom: 8,
-                minHeight: 46,
-                backgroundColor: colors.fill,
-                borderRadius: 14,
-                paddingHorizontal: 14,
-                color: colors.text,
-              }}
-            />
-          ) : null}
-          <FlatList
-            data={shown}
-            keyExtractor={(o) => o.value}
-            keyboardShouldPersistTaps="handled"
-            renderItem={({ item }) => (
-              <Pressable
-                onPress={() => {
-                  props.onChange(item.value);
-                  close();
-                }}
-                style={({ pressed }) => ({
-                  paddingVertical: 14,
-                  paddingHorizontal: 16,
-                  backgroundColor: pressed ? colors.pressed : item.value === props.value ? colors.primarySoft : colors.card,
-                  borderTopWidth: 1,
-                  borderTopColor: colors.border,
-                })}
-              >
-                <Text style={{ fontSize: 15, color: colors.text, fontWeight: item.value === props.value ? '700' : '400' }}>{item.label}</Text>
-              </Pressable>
-            )}
-            ListEmptyComponent={<Text style={{ color: colors.muted, padding: 16 }}>Nothing matches.</Text>}
-          />
-          {props.value !== '' && !props.required ? (
-            <Pressable
-              onPress={() => {
-                props.onChange('');
-                close();
-              }}
-              style={{ padding: 16, borderTopWidth: 1, borderTopColor: colors.border }}
-            >
-              <Text style={{ color: colors.danger, fontWeight: '600' }}>Clear</Text>
-            </Pressable>
-          ) : null}
-        </View>
-      </Modal>
-    </View>
-  );
+  return <Dropdown {...props} renderLabel={(label, required) => <Required label={label} required={required} />} />;
 }
 
 /** An on/off setting with its explanation. */
