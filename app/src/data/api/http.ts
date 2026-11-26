@@ -172,7 +172,6 @@ export class HttpApi implements ApiClient {
     otp: false,
     registration: false,
     documents: false,
-    favorites: false,
     officeDecisions: true,
     // Hidden until the core can record Mobile Money as such: approval would post it as banker cash.
     mobileMoney: false,
@@ -359,7 +358,6 @@ export class HttpApi implements ApiClient {
     const capabilities = asRecord(body.capabilities);
     this.capabilities.registration = capabilities.registration === true;
     this.capabilities.documents = capabilities.documents === true;
-    this.capabilities.favorites = capabilities.favorites === true;
     const branch = body.branch === null || body.branch === undefined ? null : asRecord(body.branch);
     this.office = branch
       ? { creditUnion: asText(branch.creditUnion), branchName: asText(branch.name), branchCode: asText(branch.code), city: asText(branch.city) }
@@ -407,15 +405,6 @@ export class HttpApi implements ApiClient {
       });
     }
     return out;
-  }
-
-  async pullFavorites(session: Session): Promise<string[]> {
-    const body = asRecord(await this.send(session, 'GET', `${V1}/favorites`));
-    return (Array.isArray(body.codes) ? body.codes : []).map((c) => asText(c)).filter(Boolean);
-  }
-
-  async setFavorite(session: Session, memberCode: string, on: boolean): Promise<void> {
-    await this.send(session, on ? 'PUT' : 'DELETE', `${V1}/favorites/${encodeURIComponent(memberCode)}`);
   }
 
   async fetchMemberPhoto(session: Session, memberCode: string, have: string | null) {

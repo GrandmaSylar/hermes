@@ -180,8 +180,6 @@ export interface ApiCapabilities {
   registration: boolean;
   /** KYC pictures can be sent for a registered member. */
   documents: boolean;
-  /** Favourite members are kept on the server, so they follow the officer to any phone. */
-  favorites: boolean;
   /** Mobile Money can be offered as a payment mode. Off until the core can record it as such. */
   mobileMoney: boolean;
   shareContribution: boolean;
@@ -228,9 +226,6 @@ export interface ApiClient {
   pullDeposits?(session: Session, since: string | null): Promise<ServerDeposit[]>;
   /** The members the officer registered (newest first, up to 500). */
   pullRegisteredMembers?(session: Session, since: string | null): Promise<ServerRegistration[]>;
-  /** The officer's favourite member numbers. */
-  pullFavorites?(session: Session): Promise<string[]>;
-  setFavorite?(session: Session, memberCode: string, on: boolean): Promise<void>;
   fetchLogo?(session: Session, have: string | null): Promise<{ version: string; dataUri: string } | 'UNCHANGED' | null>;
   /** The office's decisions on collections changed since the given time (or the latest ones if null). */
   pullDecisions(session: Session, since: string | null): Promise<OfficeDecision[]>;

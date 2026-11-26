@@ -20,10 +20,6 @@ export interface MemberRepo {
   applySavingsAccounts(accounts: SavingsAccountInfo[]): Promise<void>;
   setMyCustomer(memberCode: string, value: boolean): Promise<void>;
   bumpCollectCount(memberCode: string): Promise<void>;
-  /** Member numbers marked as favourites on this phone. */
-  favoriteCodes(): Promise<string[]>;
-  /** Makes exactly these members the favourites. Numbers not on the phone yet are ignored. */
-  setFavorites(codes: string[]): Promise<void>;
   /** Members marked "my customers". */
   mine(limit: number): Promise<Member[]>;
   /** Members the mobilizer collects from most often. */

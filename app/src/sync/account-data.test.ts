@@ -1,4 +1,3 @@
-import { ApiError } from '@/data/api/contract';
 import { MockApi } from '@/data/api/mock';
 import { createNodeSqlite } from '@/test/node-sqlite';
 import { createFakeFiles } from '@/test/fake-files';
@@ -7,10 +6,10 @@ import { signInToMock } from '@/test/sign-in';
 import { migrate } from '@/data/db/migrations';
 import { pickDbName } from '@/data/db/db-names';
 import { createSqliteRepos } from '@/data/db/sqlite-repos';
-import { readPendingFavorites, setFavorite, syncFavorites, toImportedDeposit, toImportedRegistration } from './account-data';
+import { toImportedDeposit, toImportedRegistration } from './account-data';
 import { syncOnce } from './engine';
 
-/** The officer's favourites and history follow them: kept on the server, filled in on any phone that signs in. */
+/** The officer's history follows them: kept on the server, filled in on any phone that signs in. */
 
 async function setup() {
   const api = new MockApi({ memberCount: 20 });
@@ -21,71 +20,6 @@ async function setup() {
   const codes = [...repos.members.rows.keys()];
   return { api, session, repos, fake, codes };
 }
-
-describe('favourites', () => {
-  test('a favourite chosen on one phone shows on another phone after it signs in', async () => {
-    const { api, session, repos, fake, codes } = await setup();
-    await setFavorite(repos, codes[0], true);
-    await setFavorite(repos, codes[1], true);
-    await syncOnce({ repos, api, session, files: fake.store });
-    expect([...api.favoriteCodes].sort()).toEqual([codes[0], codes[1]].sort());
-
-    // A second phone: nothing on it yet, same account.
-    const other = createMemoryRepos();
-    await syncOnce({ repos: other, api, session, files: fake.store });
-    expect(await other.members.favoriteCodes()).toEqual([codes[0], codes[1]].sort());
-  });
-
-  test('un-starring on one phone removes it from the other', async () => {
-    const { api, session, repos, fake, codes } = await setup();
-    await setFavorite(repos, codes[0], true);
-    await syncOnce({ repos, api, session, files: fake.store });
-    const other = createMemoryRepos();
-    await syncOnce({ repos: other, api, session, files: fake.store });
-    await setFavorite(other, codes[0], false);
-    await syncOnce({ repos: other, api, session, files: fake.store });
-    await syncOnce({ repos, api, session, files: fake.store });
-    expect(await repos.members.favoriteCodes()).toEqual([]);
-  });
-
-  test('a choice made offline waits, and is not overwritten by the older list from the server', async () => {
-    const { api, session, repos, codes } = await setup();
-    api.favoriteCodes.add(codes[2]);
-    await setFavorite(repos, codes[0], true);
-    const down = async () => {
-      throw new ApiError('NETWORK', 'down');
-    };
-    await expect(syncFavorites(repos, { pullFavorites: async () => [codes[2]], setFavorite: down })).rejects.toMatchObject({ kind: 'NETWORK' });
-    expect(await repos.members.favoriteCodes()).toEqual([codes[0]]);
-    expect(await readPendingFavorites(repos.kv)).toEqual({ [codes[0]]: true });
-
-    await syncFavorites(repos, { pullFavorites: () => api.pullFavorites({} as never), setFavorite: (c, on) => api.setFavorite({} as never, c, on) });
-    expect(await repos.members.favoriteCodes()).toEqual([codes[0], codes[2]].sort());
-    expect(await readPendingFavorites(repos.kv)).toEqual({});
-  });
-
-  test('favourites a phone already had before the server kept them are offered once, and later removals stick', async () => {
-    const { api, session, repos, fake, codes } = await setup();
-    // A phone that updated the app: members and a favourite chosen long ago, never queued, no sync with this feature yet.
-    const legacy = createMemoryRepos();
-    await legacy.members.upsertMany([...repos.members.rows.values()]);
-    await legacy.members.setMyCustomer(codes[3], true);
-    await syncOnce({ repos: legacy, api, session, files: fake.store });
-    expect(api.favoriteCodes.has(codes[3])).toBe(true);
-    // Removed on another phone: this phone must follow, not offer it again.
-    api.favoriteCodes.delete(codes[3]);
-    await syncOnce({ repos: legacy, api, session, files: fake.store });
-    expect(await legacy.members.favoriteCodes()).toEqual([]);
-    expect(api.favoriteCodes.has(codes[3])).toBe(false);
-  });
-
-  test('favourites for members that arrive later are applied when they do', async () => {
-    const { api, session, repos, fake } = await setup();
-    api.favoriteCodes.add('999999999');
-    await syncOnce({ repos, api, session, files: fake.store });
-    expect(await repos.members.favoriteCodes()).toEqual([]);
-  });
-});
 
 describe('history on a new phone', () => {
   test('deposits and registered members the server has are added, once, with the office outcome', async () => {
@@ -168,17 +102,6 @@ describe('importing into the phone database', () => {
     const [saved] = await repos.registrations.list(10);
     expect(saved).toMatchObject({ status: 'SYNCED', serverId: '1000009999', payload: null });
     expect(await repos.registrations.due(10)).toEqual([]);
-  });
-
-  test('favourites are set as a whole', async () => {
-    const repos = await fresh();
-    await repos.members.upsertMany(
-      ['1', '2', '3'].map((c) => ({ memberCode: c, name: `M${c}`, phone: '', status: 'ACTIVE' as const, branchCode: '1', balances: { savings: '0.00', shares: null, loan: null }, asOf: '2026-11-20T09:00:00.000Z', savingsAccountId: null, accounts: { savings: [], shares: [] } })),
-    );
-    await repos.members.setFavorites(['1', '3', '999']);
-    expect(await repos.members.favoriteCodes()).toEqual(['1', '3']);
-    await repos.members.setFavorites(['2']);
-    expect(await repos.members.favoriteCodes()).toEqual(['2']);
   });
 });
 

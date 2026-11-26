@@ -62,13 +62,6 @@ class MemoryMembers implements MemberRepo {
       }
     }
   }
-  async favoriteCodes() {
-    return [...this.rows.values()].filter((m) => m.myCustomer).map((m) => m.memberCode).sort();
-  }
-  async setFavorites(codes: string[]) {
-    const wanted = new Set(codes);
-    for (const m of this.rows.values()) m.myCustomer = wanted.has(m.memberCode);
-  }
   async setMyCustomer(code: string, value: boolean) {
     const m = this.rows.get(code);
     if (m) m.myCustomer = value;

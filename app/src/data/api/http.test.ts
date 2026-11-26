@@ -145,7 +145,6 @@ describe('sign-in', () => {
       otp: false,
       registration: false,
       documents: false,
-      favorites: false,
       officeDecisions: true,
       mobileMoney: false,
       shareContribution: true,

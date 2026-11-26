@@ -4,7 +4,7 @@ import type { ImportedDeposit, Repos } from '@/data/repositories';
 import type { RegistrationItem } from '@/domain/registration';
 import { kindForProduct } from '@/domain/deposit';
 import type { OutboxItem, Session } from '@/domain/types';
-import { syncFavorites, toImportedDeposit, toImportedRegistration } from './account-data';
+import { toImportedDeposit, toImportedRegistration } from './account-data';
 
 export interface SyncReport {
   pushed: number;
@@ -179,9 +179,8 @@ async function run(deps: SyncDeps): Promise<SyncReport> {
 
     await pullDecisions(deps, report);
     await pullMembersIfStale(deps, report);
-    // The officer's own history and favourites follow them to this phone (needs the members, so after them).
+    // The officer's own history follows them to this phone (needs the members, so after them).
     await pullActivity(deps, report);
-    if (api.capabilities.favorites) await syncFavorites(repos, { pullFavorites: () => api.pullFavorites!(session), setFavorite: (code, on) => api.setFavorite!(session, code, on) });
   } catch (error) {
     if (error instanceof ApiError && error.kind === 'NETWORK') report.offline = true;
     else if (error instanceof ApiError && error.kind === 'AUTH') report.authError = true;

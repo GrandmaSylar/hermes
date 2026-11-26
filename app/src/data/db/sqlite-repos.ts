@@ -262,21 +262,6 @@ class SqliteMemberRepo implements MemberRepo {
     }
   }
 
-  async favoriteCodes(): Promise<string[]> {
-    const rows = await this.db.getAllAsync<{ member_code: string }>('SELECT member_code FROM members WHERE my_customer = 1 ORDER BY member_code');
-    return rows.map((r) => r.member_code);
-  }
-
-  async setFavorites(codes: string[]): Promise<void> {
-    await this.db.withTransactionAsync(async () => {
-      await this.db.runAsync('UPDATE members SET my_customer = 0 WHERE my_customer = 1');
-      for (let i = 0; i < codes.length; i += 400) {
-        const chunk = codes.slice(i, i + 400);
-        await this.db.runAsync(`UPDATE members SET my_customer = 1 WHERE member_code IN (${chunk.map(() => '?').join(', ')})`, ...chunk);
-      }
-    });
-  }
-
   async setMyCustomer(memberCode: string, value: boolean): Promise<void> {
     await this.db.runAsync('UPDATE members SET my_customer = ? WHERE member_code = ?', value ? 1 : 0, memberCode);
   }

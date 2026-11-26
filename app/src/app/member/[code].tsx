@@ -8,7 +8,6 @@ import { formatAmount } from '@/domain/money';
 import type { Member } from '@/domain/types';
 import { useApp } from '@/state/AppProvider';
 import { useMemberPhoto } from '@/state/use-member-photo';
-import { setFavorite } from '@/sync/account-data';
 import { PressScale, Reveal, Skeleton, tap } from '@/ui/motion';
 import { Watermark } from '@/ui/brand';
 import { brand, brandGradient } from '@/ui/colors';
@@ -30,7 +29,7 @@ function BalanceRow({ icon, label, value, last }: { icon: IconName; label: strin
 
 export default function MemberScreen() {
   const { code } = useLocalSearchParams<{ code: string }>();
-  const { repos, version, touch, syncNow } = useApp();
+  const { repos, version, touch } = useApp();
   const insets = useSafeAreaInsets();
   const [member, setMember] = useState<Member | null | undefined>(undefined);
   const photo = useMemberPhoto(code);
@@ -65,10 +64,8 @@ export default function MemberScreen() {
 
   const toggle = async () => {
     tap('light');
-    if (repos) await setFavorite(repos, member.memberCode, !member.myCustomer);
+    await repos?.members.setMyCustomer(member.memberCode, !member.myCustomer);
     touch();
-    // Tell the office soon, so the favourite shows on the officer's other phones too.
-    void syncNow();
   };
 
   const active = member.status === 'ACTIVE';

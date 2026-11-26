@@ -26,7 +26,7 @@ export function useSignOut(): () => void {
 export function useForgetAccount(): () => void {
   const { signOut, repos, syncNow } = useApp();
   return useCallback(() => {
-    Alert.alert('Remove my data from this phone?', 'Favourites and history come back from the office when you sign in again.', [
+    Alert.alert('Remove my data from this phone?', 'Your history comes back from the office when you sign in again. Favourites are kept on this phone only, so they are removed.', [
       { text: 'Cancel', style: 'cancel' },
       {
         text: 'Remove',

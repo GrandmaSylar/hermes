@@ -170,18 +170,6 @@ describe('member photo over HTTP', () => {
 });
 
 describe('the officer data over HTTP', () => {
-  test('favourites are listed, added and removed by member number', async () => {
-    const { api, calls } = make({
-      'GET /v1/favorites': () => ({ status: 200, body: { codes: ['1000004764', 1000004765, ''] } }),
-      'PUT /v1/favorites/1000004764': () => ({ status: 200, body: { code: '1000004764', favorite: true } }),
-      'DELETE /v1/favorites/1000004764': () => ({ status: 200, body: { code: '1000004764', favorite: false } }),
-    });
-    expect(await api.pullFavorites(session)).toEqual(['1000004764', '1000004765']);
-    await api.setFavorite(session, '1000004764', true);
-    await api.setFavorite(session, '1000004764', false);
-    expect(calls.map((c) => `${c.method} ${c.path}`)).toEqual(['GET /v1/favorites', 'PUT /v1/favorites/1000004764', 'DELETE /v1/favorites/1000004764']);
-  });
-
   test('deposits and registered members are read with what the history needs, skipping rows without an id', async () => {
     const { api } = make({
       'GET /v1/deposits': () => ({
@@ -200,12 +188,5 @@ describe('the officer data over HTTP', () => {
     expect(deposits).toEqual([{ localTransactionId: 'a1', serverId: 'SH7', kind: 'SHARES', memberCode: '5', amount: '40.00', status: 'APPROVED', createdAt: '2026-11-20T09:00:00.000Z', decidedAt: null, reason: null }]);
     const regs = await api.pullRegisteredMembers(session, '2026-11-01T00:00:00.000Z');
     expect(regs).toEqual([{ memberCode: '1000004770', firstName: 'Abena', lastName: 'Owusu', phone: '0244', sex: 'Female', birthDate: '1990-01-01', status: 'PND', createdAt: '2026-11-19T10:00:00.000Z' }]);
-  });
-
-  test('the server says whether favourites are switched on', async () => {
-    const { api } = make({ 'GET /v1/me': () => ({ status: 200, body: { capabilities: { registration: true, documents: true, favorites: true } } }) });
-    expect(api.capabilities.favorites).toBe(false);
-    await api.refreshCapabilities(session);
-    expect(api.capabilities.favorites).toBe(true);
   });
 });

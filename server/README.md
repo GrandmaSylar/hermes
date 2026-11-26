@@ -135,10 +135,11 @@ Check after deploying: `GET /health` returns `{"status":"ok"}` and a sign-in wor
 
 Point the app at `https://<domain>` with `EXPO_PUBLIC_API_URL`.
 
-## Favourites and history follow the officer
+## History follows the officer (favourites are ready but not used yet)
 
-A field officer's favourite members and past work are kept for the person, not the phone, so signing in on another
-phone (or after a reinstall) shows the same favourites and history.
+A field officer's past work is kept for the person, not the phone, so signing in on another phone (or after a
+reinstall) shows the same history. The app also keeps favourite members on the phone only for now; the server side
+below for sharing them across phones is built and tested but the app does not call it yet.
 
 - **Deposits** already live in the core database; `GET /v1/deposits` lists the officer's own (up to 500, newest first).
 - **Registrations**: `GET /v1/registrations` lists the members the officer registered (`Customer.CreatedBy`).
