@@ -161,7 +161,8 @@ export default function DepositScreen() {
           />
         </Reveal>
         <Reveal index={3} style={{ gap: 10 }}>
-          <Button title="Done" onPress={() => router.dismissTo('/(tabs)')} />
+          <Button title="Print or save receipt" onPress={() => router.push({ pathname: '/receipt', params: { kind: 'deposit', id: item.localTransactionId } })} />
+          <Button title="Done" variant="secondary" onPress={() => router.dismissTo('/(tabs)')} />
           <Button
             title="Make another deposit"
             variant="secondary"
