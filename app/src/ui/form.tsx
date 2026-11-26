@@ -1,3 +1,4 @@
+import { Ionicons } from '@expo/vector-icons';
 import { useMemo, useState } from 'react';
 import { FlatList, Modal, Pressable, Switch, Text, TextInput, View, type TextInputProps } from 'react-native';
 import { colors } from '@/ui/theme';
@@ -11,7 +12,7 @@ export interface Option {
 
 export const toOptions = (values: readonly string[]): Option[] => values.map((v) => ({ value: v, label: v }));
 
-const labelStyle = { fontSize: 13, color: colors.muted, marginBottom: 6, fontWeight: '500' as const };
+const labelStyle = { fontSize: 13, color: colors.muted, marginBottom: 6, marginLeft: 2, fontWeight: '600' as const };
 
 export function Required({ label, required }: { label: string; required?: boolean }) {
   return (
@@ -39,7 +40,8 @@ export function TextField(
     help?: string;
   },
 ) {
-  const { label, value, onChange, required, error, help, style, multiline, ...rest } = props;
+  const { label, value, onChange, required, error, help, style, multiline, onFocus, onBlur, ...rest } = props;
+  const [focused, setFocused] = useState(false);
   return (
     <View style={{ marginBottom: 14 }}>
       <Required label={label} required={required} />
@@ -48,16 +50,25 @@ export function TextField(
         onChangeText={onChange}
         placeholderTextColor={colors.muted}
         multiline={multiline}
+        onFocus={(e) => {
+          setFocused(true);
+          onFocus?.(e);
+        }}
+        onBlur={(e) => {
+          setFocused(false);
+          onBlur?.(e);
+        }}
         style={[
           {
-            minHeight: multiline ? 84 : 48,
-            borderWidth: 1,
-            borderColor: error ? colors.danger : colors.border,
-            borderRadius: 10,
-            paddingHorizontal: 12,
-            paddingVertical: multiline ? 10 : 0,
+            minHeight: multiline ? 88 : 52,
+            borderWidth: 1.5,
+            borderColor: error ? colors.danger : focused ? colors.primary : '#EEF1F6',
+            borderRadius: 14,
+            borderCurve: 'continuous',
+            paddingHorizontal: 14,
+            paddingVertical: multiline ? 12 : 0,
             fontSize: 16,
-            backgroundColor: colors.card,
+            backgroundColor: focused ? colors.card : '#EEF1F6',
             color: colors.text,
             textAlignVertical: multiline ? 'top' : 'center',
           },
@@ -92,16 +103,17 @@ export function ChoiceField(props: {
               accessibilityState={{ selected }}
               onPress={() => props.onChange(o.value)}
               style={{
-                minHeight: 44,
-                paddingHorizontal: 14,
-                borderRadius: 10,
-                borderWidth: 1,
+                minHeight: 46,
+                paddingHorizontal: 16,
+                borderRadius: 14,
+                borderCurve: 'continuous',
+                borderWidth: 1.5,
                 justifyContent: 'center',
-                borderColor: selected ? colors.primary : props.error ? colors.danger : colors.border,
-                backgroundColor: selected ? '#EAF1FF' : colors.card,
+                borderColor: selected ? colors.primary : props.error ? colors.danger : '#EEF1F6',
+                backgroundColor: selected ? colors.primarySoft : '#EEF1F6',
               }}
             >
-              <Text style={{ color: colors.text, fontWeight: selected ? '700' : '500' }}>{o.label}</Text>
+              <Text style={{ color: selected ? colors.primaryDeep : colors.text, fontWeight: selected ? '700' : '500' }}>{o.label}</Text>
             </Pressable>
           );
         })}
@@ -146,26 +158,31 @@ export function SelectField(props: {
         disabled={props.disabled}
         onPress={() => setOpen(true)}
         style={{
-          minHeight: 48,
-          borderWidth: 1,
-          borderColor: props.error ? colors.danger : colors.border,
-          borderRadius: 10,
-          paddingHorizontal: 12,
-          justifyContent: 'center',
-          backgroundColor: colors.card,
+          minHeight: 52,
+          borderWidth: 1.5,
+          borderColor: props.error ? colors.danger : '#EEF1F6',
+          borderRadius: 14,
+          borderCurve: 'continuous',
+          paddingHorizontal: 14,
+          flexDirection: 'row',
+          alignItems: 'center',
+          justifyContent: 'space-between',
+          backgroundColor: '#EEF1F6',
           opacity: props.disabled ? 0.5 : 1,
         }}
       >
         <Text style={{ fontSize: 16, color: current ? colors.text : colors.muted }}>
           {current ? current.label : props.placeholder ?? 'Choose'}
         </Text>
+        <Ionicons name="chevron-down" size={18} color={colors.muted} />
       </Pressable>
       <Help error={props.error} help={props.help} />
 
       <Modal visible={open} transparent animationType="slide" onRequestClose={close}>
         <Pressable style={{ flex: 1, backgroundColor: 'rgba(16,24,40,0.45)' }} onPress={close} />
-        <View style={{ maxHeight: '70%', backgroundColor: colors.card, borderTopLeftRadius: 16, borderTopRightRadius: 16, paddingTop: 12 }}>
-          <Text style={{ fontSize: 16, fontWeight: '700', color: colors.text, paddingHorizontal: 16, paddingBottom: 8 }}>{props.label}</Text>
+        <View style={{ maxHeight: '72%', backgroundColor: colors.card, borderTopLeftRadius: 28, borderTopRightRadius: 28, paddingTop: 10, borderCurve: 'continuous' }}>
+          <View style={{ alignSelf: 'center', width: 40, height: 5, borderRadius: 3, backgroundColor: '#D5D9E2', marginBottom: 12 }} />
+          <Text style={{ fontSize: 18, fontWeight: '800', color: colors.text, paddingHorizontal: 20, paddingBottom: 10, letterSpacing: -0.2 }}>{props.label}</Text>
           {searchable ? (
             <TextInput
               value={filter}
@@ -176,11 +193,10 @@ export function SelectField(props: {
               style={{
                 marginHorizontal: 16,
                 marginBottom: 8,
-                minHeight: 44,
-                borderWidth: 1,
-                borderColor: colors.border,
-                borderRadius: 10,
-                paddingHorizontal: 12,
+                minHeight: 46,
+                backgroundColor: '#EEF1F6',
+                borderRadius: 14,
+                paddingHorizontal: 14,
                 color: colors.text,
               }}
             />
@@ -198,7 +214,7 @@ export function SelectField(props: {
                 style={({ pressed }) => ({
                   paddingVertical: 14,
                   paddingHorizontal: 16,
-                  backgroundColor: pressed ? '#EEF2F6' : item.value === props.value ? '#EAF1FF' : colors.card,
+                  backgroundColor: pressed ? '#EEF2F6' : item.value === props.value ? colors.primarySoft : colors.card,
                   borderTopWidth: 1,
                   borderTopColor: colors.border,
                 })}
@@ -239,14 +255,14 @@ export function SwitchRow(props: { label: string; help?: string; value: boolean;
 }
 
 export function SectionTitle({ children }: { children: string }) {
-  return <Text style={{ fontSize: 15, fontWeight: '700', color: colors.text, marginTop: 8, marginBottom: 12 }}>{children}</Text>;
+  return <Text style={{ fontSize: 17, fontWeight: '800', color: colors.text, marginTop: 8, marginBottom: 12, letterSpacing: -0.2 }}>{children}</Text>;
 }
 
 /** The problems found on a step, listed together at the top as the office form does. */
 export function ProblemBox({ problems }: { problems: { message: string }[] }) {
   if (problems.length === 0) return null;
   return (
-    <View style={{ backgroundColor: colors.dangerBg, borderRadius: 10, padding: 12, marginBottom: 14 }}>
+    <View style={{ backgroundColor: colors.dangerBg, borderRadius: 14, borderCurve: 'continuous', padding: 14, marginBottom: 14 }}>
       <Text style={{ color: colors.danger, fontWeight: '700', marginBottom: 4 }}>Please correct the following</Text>
       {problems.map((p, i) => (
         <Text key={i} style={{ color: colors.danger, fontSize: 13, marginTop: 2 }}>
@@ -259,10 +275,10 @@ export function ProblemBox({ problems }: { problems: { message: string }[] }) {
 
 /** A warning that something the form is about to use already belongs to another member. */
 export function NoticeBox({ tone, children }: { tone: 'warn' | 'info'; children: React.ReactNode }) {
-  const bg = tone === 'warn' ? colors.warnBg : '#EAF1FF';
-  const fg = tone === 'warn' ? colors.warn : colors.primary;
+  const bg = tone === 'warn' ? colors.warnBg : colors.primarySoft;
+  const fg = tone === 'warn' ? colors.warn : colors.primaryDeep;
   return (
-    <View style={{ backgroundColor: bg, borderRadius: 10, padding: 12, marginBottom: 14 }}>
+    <View style={{ backgroundColor: bg, borderRadius: 14, borderCurve: 'continuous', padding: 14, marginBottom: 14 }}>
       <Text style={{ color: fg, fontSize: 13 }}>{children}</Text>
     </View>
   );

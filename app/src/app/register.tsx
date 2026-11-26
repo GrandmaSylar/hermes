@@ -1,6 +1,7 @@
 import { router } from 'expo-router';
 import { useEffect, useMemo, useRef, useState } from 'react';
-import { KeyboardAvoidingView, Platform, ScrollView, Text, View, type ScrollViewInstance } from 'react-native';
+import { Animated, Easing, KeyboardAvoidingView, Platform, ScrollView, Text, View, type ScrollViewInstance } from 'react-native';
+import { SuccessMark } from '@/ui/motion';
 import type { MemberConflict } from '@/data/api/contract';
 import {
   DEFAULT_MEMBER_TYPES,
@@ -56,6 +57,10 @@ export default function RegisterScreen() {
   const [message, setMessage] = useState<string | null>(null);
   const [saved, setSaved] = useState<RegistrationItem | null>(null);
   const scroller = useRef<ScrollViewInstance>(null);
+  const progress = useRef(new Animated.Value(1 / STEPS.length)).current;
+  useEffect(() => {
+    Animated.timing(progress, { toValue: (step + 1) / STEPS.length, duration: 380, easing: Easing.out(Easing.cubic), useNativeDriver: false }).start();
+  }, [step, progress]);
 
   // The member types last fetched from the server, so the form works without a connection.
   useEffect(() => {
@@ -200,10 +205,13 @@ export default function RegisterScreen() {
 
   if (saved) {
     return (
-      <ScrollView contentContainerStyle={{ padding: 16, gap: 12 }}>
+      <ScrollView style={{ backgroundColor: colors.bg }} contentContainerStyle={{ padding: 16, gap: 16 }}>
+        <View style={{ alignItems: 'center', paddingTop: 16 }}>
+          <SuccessMark />
+        </View>
         <Card>
-          <Text style={{ fontSize: 20, fontWeight: '700', color: colors.ok }}>Registration saved</Text>
-          <Text style={{ color: colors.text, marginTop: 12, fontSize: 22, fontWeight: '700' }}>{fullName(saved)}</Text>
+          <Text style={{ fontSize: 15, fontWeight: '700', color: colors.ok }}>Registration saved</Text>
+          <Text style={{ color: colors.text, marginTop: 8, fontSize: 26, fontWeight: '800', letterSpacing: -0.4 }}>{fullName(saved)}</Text>
           <Text style={{ color: colors.muted, marginTop: 2 }}>{saved.phone}</Text>
           <Text style={{ color: colors.muted, marginTop: 12, fontSize: 12 }}>
             Saved on this phone and sent to the office automatically. The member gets a member number and can transact once the office approves, so do not collect cash for them yet.
@@ -222,12 +230,12 @@ export default function RegisterScreen() {
   return (
     <KeyboardAvoidingView style={{ flex: 1 }} behavior={Platform.OS === 'ios' ? 'padding' : undefined}>
       <View style={{ paddingHorizontal: 16, paddingTop: 12, paddingBottom: 8, backgroundColor: colors.bg }}>
-        <Text style={{ color: colors.muted, fontSize: 12 }}>
-          Step {step + 1} of {STEPS.length}
+        <Text style={{ color: colors.primary, fontSize: 12, fontWeight: '800', letterSpacing: 0.6 }}>
+          STEP {step + 1} OF {STEPS.length}
         </Text>
-        <Text style={{ color: colors.text, fontSize: 18, fontWeight: '700', marginTop: 2 }}>{STEPS[step].label}</Text>
-        <View style={{ height: 4, borderRadius: 2, backgroundColor: colors.border, marginTop: 8 }}>
-          <View style={{ height: 4, borderRadius: 2, backgroundColor: colors.primary, width: `${((step + 1) / STEPS.length) * 100}%` }} />
+        <Text style={{ color: colors.text, fontSize: 26, fontWeight: '800', marginTop: 2, letterSpacing: -0.5 }}>{STEPS[step].label}</Text>
+        <View style={{ height: 6, borderRadius: 3, backgroundColor: '#E3E7EE', marginTop: 10, overflow: 'hidden' }}>
+          <Animated.View style={{ height: 6, borderRadius: 3, backgroundColor: colors.primary, width: progress.interpolate({ inputRange: [0, 1], outputRange: ['0%', '100%'] }) }} />
         </View>
       </View>
       <ScrollView ref={scroller} contentContainerStyle={{ padding: 16, paddingBottom: 32 }} keyboardShouldPersistTaps="handled">

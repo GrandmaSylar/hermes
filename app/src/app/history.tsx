@@ -26,6 +26,7 @@ import type { RegistrationItem } from '@/domain/registration';
 import type { Member, OutboxItem } from '@/domain/types';
 import { useApp } from '@/state/AppProvider';
 import { DepositRow, RADIUS, RegistrationRow, nums, shadow } from '@/ui/activity-rows';
+import { Reveal, SkeletonRow } from '@/ui/motion';
 import { colors } from '@/ui/theme';
 
 type Tab = 'deposits' | 'registrations';
@@ -115,6 +116,7 @@ export default function HistoryScreen() {
   const [deposits, setDeposits] = useState<OutboxItem[]>([]);
   const [registrations, setRegistrations] = useState<RegistrationItem[]>([]);
   const [members, setMembers] = useState<Record<string, Pick<Member, 'status'>>>({});
+  const [loaded, setLoaded] = useState(false);
   const today = new Date();
   const all = range.from === '0000-01-01';
 
@@ -136,6 +138,7 @@ export default function HistoryScreen() {
       setDeposits(d);
       setRegistrations(r);
       setMembers(found);
+      setLoaded(true);
     })();
     return () => {
       live = false;
@@ -213,7 +216,9 @@ export default function HistoryScreen() {
 
       {/* List */}
       <View style={{ backgroundColor: colors.card, borderRadius: 20, overflow: 'hidden', ...RADIUS, ...shadow }}>
-        {shown.rows.length === 0 ? (
+        {!loaded ? (
+          [0, 1, 2, 3].map((i) => <SkeletonRow key={i} />)
+        ) : shown.rows.length === 0 ? (
           <View style={{ padding: 32, alignItems: 'center', gap: 8 }}>
             <Ionicons name={tab === 'deposits' ? 'cash-outline' : 'person-add-outline'} size={32} color={colors.muted} />
             <Text style={{ fontSize: 16, fontWeight: '600', color: colors.text }}>Nothing here</Text>
@@ -222,10 +227,16 @@ export default function HistoryScreen() {
             </Text>
           </View>
         ) : tab === 'deposits' ? (
-          (shown.rows as { item: OutboxItem }[]).map((r, i) => <DepositRow key={r.item.localTransactionId} item={r.item} last={i === shown.rows.length - 1} withDay />)
+          (shown.rows as { item: OutboxItem }[]).map((r, i) => (
+            <Reveal key={r.item.localTransactionId} index={i} from={8}>
+              <DepositRow item={r.item} last={i === shown.rows.length - 1} withDay />
+            </Reveal>
+          ))
         ) : (
           (shown.rows as { item: RegistrationItem }[]).map((r, i) => (
-            <RegistrationRow key={r.item.localRegistrationId} item={r.item} member={r.item.serverId ? (members[r.item.serverId] ?? null) : null} last={i === shown.rows.length - 1} withDay />
+            <Reveal key={r.item.localRegistrationId} index={i} from={8}>
+              <RegistrationRow item={r.item} member={r.item.serverId ? (members[r.item.serverId] ?? null) : null} last={i === shown.rows.length - 1} withDay />
+            </Reveal>
           ))
         )}
       </View>

@@ -11,6 +11,7 @@ import type { Member, OutboxItem } from '@/domain/types';
 import { useApp } from '@/state/AppProvider';
 import { KV_OFFICE, KV_PULLED_AT } from '@/sync/engine';
 import { DepositRow, RADIUS, RegistrationRow, Tappable, nums, shadow } from '@/ui/activity-rows';
+import { PressScale, Reveal, SkeletonRow } from '@/ui/motion';
 import { colors } from '@/ui/theme';
 
 type IconName = React.ComponentProps<typeof Ionicons>['name'];
@@ -88,6 +89,7 @@ export default function HomeTab() {
   const [office, setOffice] = useState<OfficeProfile | null>(null);
   const [pulledAt, setPulledAt] = useState<string | null>(null);
   const [note, setNote] = useState('');
+  const [loaded, setLoaded] = useState(false);
   const now = new Date();
 
   useEffect(() => {
@@ -113,6 +115,7 @@ export default function HomeTab() {
       }
       if (!live) return;
       setApproved(found);
+      setLoaded(true);
       setPulledAt(pulled);
       try {
         setOffice(officeText ? (JSON.parse(officeText) as OfficeProfile) : null);
@@ -157,7 +160,7 @@ export default function HomeTab() {
       style={{ backgroundColor: colors.bg }}
     >
       {/* Who and where */}
-      <View style={{ flexDirection: 'row', alignItems: 'center', gap: 12 }}>
+      <Reveal style={{ flexDirection: 'row', alignItems: 'center', gap: 12 }}>
         <View style={{ flex: 1, gap: 2 }}>
           <Text style={{ fontSize: 15, color: colors.muted, fontWeight: '500' }}>{greeting(now)}, {firstName(name)}</Text>
           <Text selectable numberOfLines={2} style={{ fontSize: 28, fontWeight: '800', color: colors.text, letterSpacing: -0.4 }}>{name || 'Field officer'}</Text>
@@ -165,7 +168,7 @@ export default function HomeTab() {
         <View style={{ width: 48, height: 48, borderRadius: 24, backgroundColor: colors.primary, alignItems: 'center', justifyContent: 'center' }}>
           <Text style={{ color: colors.primaryText, fontSize: 18, fontWeight: '700' }}>{initials(name)}</Text>
         </View>
-      </View>
+      </Reveal>
 
       {officeLineText ? (
         <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8, marginTop: -8 }}>
@@ -175,6 +178,7 @@ export default function HomeTab() {
       ) : null}
 
       {/* Cash */}
+      <Reveal index={1}>
       <View
         style={{
           padding: 20,
@@ -206,6 +210,7 @@ export default function HomeTab() {
           </View>
         </View>
       </View>
+      </Reveal>
 
       {figures.needAttention > 0 ? (
         <Tappable onPress={() => router.push('/history')} label="Items need attention">
@@ -220,7 +225,7 @@ export default function HomeTab() {
       ) : null}
 
       {/* Actions */}
-      <View style={{ flexDirection: 'row', gap: 12 }}>
+      <Reveal index={2} style={{ flexDirection: 'row', gap: 12 }}>
         <ActionTile icon="cash-outline" title="Take a deposit" hint="Choose a member, enter the amount" tone="blue" onPress={() => router.navigate({ pathname: '/members', params: { mode: 'deposit' } })} />
         <ActionTile
           icon="person-add-outline"
@@ -230,17 +235,17 @@ export default function HomeTab() {
           disabled={!capabilities.registration}
           onPress={() => router.push('/register')}
         />
-      </View>
+      </Reveal>
 
       {/* Numbers */}
-      <View style={{ flexDirection: 'row', gap: 12 }}>
+      <Reveal index={3} style={{ flexDirection: 'row', gap: 12 }}>
         <StatTile icon="people-outline" label="Members" value={members.toLocaleString()} />
         <StatTile icon="person-add-outline" label="Registered by me" value={String(registered)} />
         <StatTile icon="receipt-outline" label="Deposits, all time" value={String(figures.allTime.count)} />
-      </View>
+      </Reveal>
 
       {/* Today */}
-      <View style={{ gap: 8 }}>
+      <Reveal index={4} style={{ gap: 8 }}>
         <View style={{ flexDirection: 'row', alignItems: 'baseline', justifyContent: 'space-between', paddingHorizontal: 4 }}>
           <View>
             <Text style={{ fontSize: 20, fontWeight: '700', color: colors.text }}>Today</Text>
@@ -251,7 +256,12 @@ export default function HomeTab() {
           </Pressable>
         </View>
         <View style={{ backgroundColor: colors.card, borderRadius: 20, overflow: 'hidden', ...RADIUS, ...shadow }}>
-          {recent.length === 0 ? (
+          {!loaded ? (
+            <>
+              <SkeletonRow />
+              <SkeletonRow />
+            </>
+          ) : recent.length === 0 ? (
             <View style={{ padding: 28, alignItems: 'center', gap: 8 }}>
               <Ionicons name="today-outline" size={32} color={colors.muted} />
               <Text style={{ fontSize: 16, fontWeight: '600', color: colors.text }}>Nothing recorded today</Text>
@@ -272,7 +282,7 @@ export default function HomeTab() {
             {entries.length - recent.length} more today. Open History to see everything.
           </Text>
         ) : null}
-      </View>
+      </Reveal>
 
       {/* Sync */}
       <Tappable onPress={refresh} label="Sync now" disabled={syncing}>

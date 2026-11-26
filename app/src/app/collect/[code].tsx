@@ -1,6 +1,7 @@
 import { router, useLocalSearchParams } from 'expo-router';
 import { useEffect, useRef, useState } from 'react';
 import { KeyboardAvoidingView, Platform, ScrollView, Text, View } from 'react-native';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { validateCapture, type UnsyncedTotals } from '@/domain/capture';
 import {
   PRODUCT_FOR_TYPE,
@@ -19,7 +20,8 @@ import { formatAmount } from '@/domain/money';
 import { PAYMENT_LABELS, type Member, type OutboxItem, type PaymentMode } from '@/domain/types';
 import { useApp } from '@/state/AppProvider';
 import { captureCollection } from '@/sync/capture';
-import { Button, Card, Field, colors } from '@/ui/theme';
+import { Reveal, SuccessMark } from '@/ui/motion';
+import { Button, Card, Field, RADIUS, colors } from '@/ui/theme';
 import { AccountChooser, ConfirmDepositModal, PaymentModeChooser } from '@/ui/deposit-parts';
 
 /**
@@ -30,6 +32,8 @@ import { AccountChooser, ConfirmDepositModal, PaymentModeChooser } from '@/ui/de
 export default function DepositScreen() {
   const { code, type: typeParam } = useLocalSearchParams<{ code: string; type?: string }>();
   const type = parseDepositType(typeParam);
+  const insets = useSafeAreaInsets();
+  const page = { padding: 16, paddingBottom: insets.bottom + 32, gap: 16 };
   const { repos, session, newId, touch, syncNow, capabilities, version } = useApp();
   const [member, setMember] = useState<Member | null>(null);
   const [unsynced, setUnsynced] = useState<UnsyncedTotals>({ count: 0, amountMinor: 0n });
@@ -56,14 +60,17 @@ export default function DepositScreen() {
     void repos.outbox.unsyncedTotals().then(setUnsynced);
   }, [repos, version]);
 
-  if (!member || !repos || !session) return null;
+  if (!member || !repos || !session) return <View style={{ flex: 1, backgroundColor: colors.bg }} />;
 
   if (!type) {
     return (
-      <ScrollView contentContainerStyle={{ padding: 16, gap: 12 }}>
-        <Text style={{ fontSize: 18, fontWeight: '700', color: colors.text }}>What is the deposit for?</Text>
-        <Button title="Savings deposit" onPress={() => router.replace(`/collect/${member.memberCode}?type=savings`)} />
-        <Button title="Shares deposit" onPress={() => router.replace(`/collect/${member.memberCode}?type=shares`)} />
+      <ScrollView style={{ backgroundColor: colors.bg }} contentContainerStyle={page}>
+        <Reveal>
+          <Text style={{ fontSize: 28, fontWeight: '800', color: colors.text, letterSpacing: -0.5 }}>What is the deposit for?</Text>
+          <Text style={{ color: colors.muted, marginTop: 4 }}>{member.name}</Text>
+        </Reveal>
+        <Reveal index={1}><Button title="Savings deposit" onPress={() => router.replace(`/collect/${member.memberCode}?type=savings`)} /></Reveal>
+        <Reveal index={2}><Button title="Shares deposit" variant="secondary" onPress={() => router.replace(`/collect/${member.memberCode}?type=shares`)} /></Reveal>
       </ScrollView>
     );
   }
@@ -72,7 +79,7 @@ export default function DepositScreen() {
   const unavailable = depositUnavailableReason(member, type);
   if (unavailable) {
     return (
-      <ScrollView contentContainerStyle={{ padding: 16, gap: 12 }}>
+      <ScrollView style={{ backgroundColor: colors.bg }} contentContainerStyle={page}>
         <Card>
           <Text style={{ fontSize: 18, fontWeight: '700', color: colors.text }}>{title}</Text>
           <Text style={{ color: colors.warn, marginTop: 8, fontSize: 16 }}>{unavailable}</Text>
@@ -122,46 +129,56 @@ export default function DepositScreen() {
 
   if (saved) {
     const { item } = saved;
+    const row = (label: string, value: string) => (
+      <View key={label} style={{ flexDirection: 'row', justifyContent: 'space-between', gap: 16, paddingVertical: 10, borderBottomWidth: 1, borderBottomColor: colors.border }}>
+        <Text style={{ color: colors.muted }}>{label}</Text>
+        <Text selectable style={{ color: colors.text, fontWeight: '600', flexShrink: 1, textAlign: 'right' }}>{value}</Text>
+      </View>
+    );
     return (
-      <ScrollView contentContainerStyle={{ padding: 16, gap: 12 }}>
-        <Card>
-          <Text style={{ fontSize: 20, fontWeight: '700', color: colors.ok }}>{title} saved</Text>
-          <Text style={{ color: colors.text, marginTop: 12, fontSize: 28, fontWeight: '700' }}>GHS {formatAmount(item.amount)}</Text>
-          <Text style={{ color: colors.text, marginTop: 4, fontSize: 16 }}>
-            {item.memberName} · {item.memberCode}
-          </Text>
-          {item.accountLabel ? <Text style={{ color: colors.muted, marginTop: 2, fontSize: 15 }}>{item.accountLabel}</Text> : null}
-          <Text style={{ color: colors.muted, marginTop: 2, fontSize: 15 }}>Payment: {PAYMENT_LABELS[item.paymentMode]}</Text>
-          <View style={{ height: 12 }} />
-          <Text style={{ color: colors.text, fontSize: 15, fontWeight: '600' }}>Saved on this phone, will be sent</Text>
-          <Text style={{ color: colors.muted, marginTop: 2, fontSize: 15 }}>Waiting for the office to approve</Text>
-          <Text style={{ color: colors.muted, marginTop: 12, fontSize: 14 }}>
-            Expected balance after approval: GHS {formatAmount(saved.expected)}. The balance does not change until the office approves this deposit.
-          </Text>
-          <Text style={{ color: colors.muted, marginTop: 8, fontSize: 13 }}>Ref {item.localTransactionId.slice(0, 8).toUpperCase()}</Text>
-        </Card>
-        <Button title="Done" onPress={() => router.dismissTo('/(tabs)')} />
-        <Button
-          title="Make another deposit"
-          variant="secondary"
-          onPress={() => {
-            setSaved(null);
-            setAmount('');
-            setSelectedId(preselectedAccountId(accounts));
-          }}
-        />
+      <ScrollView style={{ backgroundColor: colors.bg }} contentContainerStyle={page}>
+        <View style={{ alignItems: 'center', gap: 12, paddingTop: 12 }}>
+          <SuccessMark />
+          <Reveal index={1} style={{ alignItems: 'center', gap: 4 }}>
+            <Text style={{ fontSize: 15, fontWeight: '700', color: colors.ok }}>{title} saved</Text>
+            <Text selectable style={{ fontSize: 40, fontWeight: '800', color: colors.text, letterSpacing: -1, fontVariant: ['tabular-nums'] }}>GHS {formatAmount(item.amount)}</Text>
+          </Reveal>
+        </View>
+        <Reveal index={2}>
+          <Card>
+            {row('Member', `${item.memberName} · ${item.memberCode}`)}
+            {item.accountLabel ? row('Account', item.accountLabel) : null}
+            {row('Payment', PAYMENT_LABELS[item.paymentMode])}
+            {row('Expected balance', `GHS ${formatAmount(saved.expected)}`)}
+            {row('Reference', item.localTransactionId.slice(0, 8).toUpperCase())}
+            <Text style={{ color: colors.text, fontSize: 15, fontWeight: '600', marginTop: 14 }}>Saved on this phone, will be sent</Text>
+            <Text style={{ color: colors.muted, marginTop: 2, fontSize: 14 }}>Waiting for the office to approve. The balance does not change until the office approves this deposit.</Text>
+          </Card>
+        </Reveal>
+        <Reveal index={3} style={{ gap: 10 }}>
+          <Button title="Done" onPress={() => router.dismissTo('/(tabs)')} />
+          <Button
+            title="Make another deposit"
+            variant="secondary"
+            onPress={() => {
+              setSaved(null);
+              setAmount('');
+              setSelectedId(preselectedAccountId(accounts));
+            }}
+          />
+        </Reveal>
       </ScrollView>
     );
   }
 
   return (
     <KeyboardAvoidingView style={{ flex: 1 }} behavior={Platform.OS === 'ios' ? 'padding' : undefined}>
-      <ScrollView contentContainerStyle={{ padding: 16, gap: 16 }} keyboardShouldPersistTaps="handled">
-        <View>
-          <Text style={{ fontSize: 13, color: colors.primary, fontWeight: '700' }}>{title.toUpperCase()}</Text>
-          <Text style={{ fontSize: 22, fontWeight: '700', color: colors.text }}>{member.name}</Text>
-          <Text style={{ color: colors.muted, fontSize: 15 }}>{member.memberCode}</Text>
-        </View>
+      <ScrollView style={{ backgroundColor: colors.bg }} contentContainerStyle={page} keyboardShouldPersistTaps="handled">
+        <Reveal>
+          <Text style={{ fontSize: 13, color: colors.primary, fontWeight: '800', letterSpacing: 0.8 }}>{title.toUpperCase()}</Text>
+          <Text selectable style={{ fontSize: 28, fontWeight: '800', color: colors.text, letterSpacing: -0.5 }}>{member.name}</Text>
+          <Text selectable style={{ color: colors.muted, fontSize: 15 }}>{member.memberCode}</Text>
+        </Reveal>
 
         <AccountChooser
           title={type === 'savings' ? 'Choose the savings account' : 'Choose the shares account'}
@@ -172,7 +189,7 @@ export default function DepositScreen() {
             setError(null);
           }}
         />
-        <Text style={{ color: colors.muted, fontSize: 13, marginTop: -8 }}>Balances as of last sync.</Text>
+        <Text style={{ color: colors.muted, fontSize: 13, marginTop: -8, marginLeft: 4 }}>Balances as of last sync.</Text>
 
         <Field
           label="Deposit amount (GHS)"
@@ -184,24 +201,34 @@ export default function DepositScreen() {
           keyboardType="decimal-pad"
           placeholder="0.00"
           error={error ?? hint}
-          style={{ fontSize: 20 }}
+          style={{ fontSize: 30, fontWeight: '800', minHeight: 68, fontVariant: ['tabular-nums'] }}
         />
 
         {showModes ? <PaymentModeChooser modes={modes} selected={paymentMode} onSelect={setPaymentMode} /> : null}
 
         {account && expected ? (
-          <Card>
-            <Text style={{ color: colors.muted, fontSize: 12, fontWeight: '600' }}>EXPECTED BALANCE AFTER APPROVAL</Text>
-            <Text style={{ color: colors.text, fontSize: 24, fontWeight: '700', marginTop: 4 }}>GHS {formatAmount(expected)}</Text>
-            <Text style={{ color: colors.muted, fontSize: 13, marginTop: 4 }}>
-              {accountLabel(account)}: GHS {formatAmount(account.balance)} now, plus this deposit. Nothing posts until the office approves it.
-              Deposits not yet approved are not counted.
-            </Text>
-          </Card>
+          <Reveal>
+            <View
+              style={{
+                padding: 18,
+                gap: 4,
+                borderRadius: 22,
+                backgroundColor: colors.primary,
+                experimental_backgroundImage: `linear-gradient(150deg, ${colors.primary}, ${colors.primaryDeep})`,
+                ...RADIUS,
+              }}
+            >
+              <Text style={{ color: 'rgba(255,255,255,0.8)', fontSize: 12, fontWeight: '700', letterSpacing: 0.6 }}>EXPECTED BALANCE AFTER APPROVAL</Text>
+              <Text selectable style={{ color: '#FFFFFF', fontSize: 32, fontWeight: '800', letterSpacing: -0.6, fontVariant: ['tabular-nums'] }}>GHS {formatAmount(expected)}</Text>
+              <Text style={{ color: 'rgba(255,255,255,0.8)', fontSize: 13, marginTop: 4 }}>
+                {accountLabel(account)}: GHS {formatAmount(account.balance)} now, plus this deposit. Nothing posts until the office approves it. Deposits not yet approved are not counted.
+              </Text>
+            </View>
+          </Reveal>
         ) : null}
 
         <Button title="Submit" onPress={() => setConfirming(true)} disabled={problem !== null || summary === null} />
-        <Text style={{ color: colors.muted, fontSize: 13 }}>
+        <Text style={{ color: colors.muted, fontSize: 13, textAlign: 'center' }}>
           You will check the details first. Then the deposit is saved on this phone and sent automatically, even if there is no network now.
         </Text>
       </ScrollView>
