@@ -8,6 +8,7 @@ import type {
   BranchInfo,
   CreditUnionLogo,
   MemberPhoto,
+  RegisteredMemberRow,
   DepositInput,
   DepositKind,
   DepositRow,
@@ -26,6 +27,7 @@ import * as registration from './mssql-registration';
 import * as documents from './mssql-documents';
 import { logoFrom, photoFrom, type CheckedDocument } from './documents';
 import type { RegistrationBody } from './registration';
+import { createdByOf } from './mssql-registration';
 import { buildSchema, describe as describeSchema, has, nameExpr, pick, product, TABLES, type Schema } from './schema';
 
 /** The tag the core system filters on; the same value the existing channel writes. */
@@ -137,6 +139,56 @@ export class MssqlRepo implements Repo {
          ORDER BY ${byStaff ? 'CASE WHEN EmployeeID = @u THEN 0 ELSE 1 END, ' : ''}FieldOfficerID`,
       );
     return result.recordset[0] ? this.officerFrom(result.recordset[0]) : null;
+  }
+
+  async listFavorites(officerId: string): Promise<string[]> {
+    if (!has(this.schema, 'FieldOfficerFavorite.MemberCode')) return [];
+    const result = await this.pool
+      .request()
+      .input('id', sql.Int, Number(officerId))
+      .query(`SELECT MemberCode FROM dbo.FieldOfficerFavorite WHERE FieldOfficerID = @id AND IsActive = 1 ORDER BY MemberCode`);
+    return result.recordset.map((r) => String(r.MemberCode));
+  }
+
+  async setFavorite(officerId: string, memberCode: string, on: boolean): Promise<void> {
+    if (!has(this.schema, 'FieldOfficerFavorite.MemberCode')) return;
+    // Switched on or off in place: rows are never deleted, matching the rest of what this login may do.
+    await this.pool
+      .request()
+      .input('id', sql.Int, Number(officerId))
+      .input('code', sql.Numeric(10, 0), Number(memberCode))
+      .input('on', sql.Bit, on)
+      .query(
+        `UPDATE dbo.FieldOfficerFavorite SET IsActive = @on, UpdatedAt = SYSUTCDATETIME() WHERE FieldOfficerID = @id AND MemberCode = @code;
+         IF @@ROWCOUNT = 0 AND @on = 1
+           INSERT INTO dbo.FieldOfficerFavorite (FieldOfficerID, MemberCode, IsActive, CreatedAt) VALUES (@id, @code, 1, SYSUTCDATETIME());`,
+      );
+  }
+
+  async listRegisteredMembers(officer: Officer, since: Date | null, limit: number): Promise<RegisteredMemberRow[]> {
+    const result = await this.pool
+      .request()
+      .input('by', sql.NVarChar(200), createdByOf(officer))
+      .input('since', sql.DateTime2, since)
+      .input('limit', sql.Int, limit)
+      .query(
+        `SELECT TOP (@limit) Code, RTRIM(FirstName) AS FirstName, RTRIM(LastName) AS LastName,
+                ${has(this.schema, 'Customer.PhoneNo') ? 'RTRIM(PhoneNo)' : "CAST('' AS nvarchar(100))"} AS PhoneNo,
+                RTRIM(Sex) AS Sex, BirthDate, RTRIM(StatusCode) AS StatusCode, CreatedAt
+         FROM dbo.Customer
+         WHERE CreatedBy = @by AND (@since IS NULL OR CreatedAt >= @since)
+         ORDER BY CustomerID DESC`,
+      );
+    return result.recordset.map((r) => ({
+      code: String(r.Code),
+      firstName: String(r.FirstName ?? ''),
+      lastName: String(r.LastName ?? ''),
+      phone: String(r.PhoneNo ?? ''),
+      sex: String(r.Sex ?? ''),
+      birthDate: r.BirthDate instanceof Date ? r.BirthDate.toISOString().slice(0, 10) : null,
+      statusCode: String(r.StatusCode ?? ''),
+      createdAt: r.CreatedAt instanceof Date ? r.CreatedAt : null,
+    }));
   }
 
   async getMemberPhoto(officer: Officer, memberCode: string): Promise<MemberPhoto | null> {

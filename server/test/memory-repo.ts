@@ -13,6 +13,7 @@ import type {
   MemberConflict,
   MemberLookup,
   MemberRow,
+  RegisteredMemberRow,
   MemberTypeRow,
   Officer,
   Repo,
@@ -49,7 +50,7 @@ export class MemoryRepo implements Repo {
   existing: { code: string; name: string; nationalId?: string; voterIdNo?: string; nhisNo?: string; passportNo?: string; phone?: string; email?: string }[] = [];
 
   describeSchema() {
-    return { sharesEnabled: true, registrationEnabled: this.registrationEnabled, documentsEnabled: this.documentsEnabled };
+    return { sharesEnabled: true, registrationEnabled: this.registrationEnabled, documentsEnabled: this.documentsEnabled, favoritesEnabled: this.favoritesEnabled };
   }
   async listMemberTypes() {
     return this.memberTypes;
@@ -122,6 +123,21 @@ export class MemoryRepo implements Repo {
   logo: { version: string; dataUri: string } | null = { version: 'v1', dataUri: 'data:image/png;base64,AAAA' };
   async getLogo(_branchCode: string) {
     return this.logo;
+  }
+  favorites = new Map<string, Set<string>>();
+  favoritesEnabled = true;
+  registered: RegisteredMemberRow[] = [];
+  async listFavorites(officerId: string) {
+    return [...(this.favorites.get(officerId) ?? [])].sort();
+  }
+  async setFavorite(officerId: string, memberCode: string, on: boolean) {
+    const set = this.favorites.get(officerId) ?? new Set<string>();
+    if (on) set.add(memberCode);
+    else set.delete(memberCode);
+    this.favorites.set(officerId, set);
+  }
+  async listRegisteredMembers(_officer: Officer, _since: Date | null, limit: number) {
+    return this.registered.slice(0, limit);
   }
   photos = new Map<string, { version: string; mimeType: string; dataBase64: string }>();
   async getMemberPhoto(_officer: Officer, memberCode: string) {

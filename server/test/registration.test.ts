@@ -258,10 +258,10 @@ describe('member types, duplicate check and capability', () => {
 
   test('/me tells the app whether registration is on', async () => {
     const on = await app.inject({ method: 'GET', url: '/v1/me', headers: { authorization: auth } });
-    expect(on.json().capabilities).toEqual({ registration: true, documents: true });
+    expect(on.json().capabilities).toEqual({ registration: true, documents: true, favorites: true });
     repo.registrationEnabled = false;
     const off = await app.inject({ method: 'GET', url: '/v1/me', headers: { authorization: auth } });
-    expect(off.json().capabilities).toEqual({ registration: false, documents: false });
+    expect(off.json().capabilities).toEqual({ registration: false, documents: false, favorites: true });
   });
 
   test('/me names the branch and credit union, or null when they cannot be read', async () => {
@@ -292,5 +292,34 @@ describe('member types, duplicate check and capability', () => {
     expect(none.json()).toEqual({ version: null, mimeType: null, dataBase64: null });
     const bad = await app.inject({ method: 'GET', url: '/v1/members/abc/photo', headers: { authorization: auth } });
     expect(bad.statusCode).toBe(400);
+  });
+
+  test('favourites follow the officer: listed, added, removed, and never mixed with another officer', async () => {
+    const get = async () => (await app.inject({ method: 'GET', url: '/v1/favorites', headers: { authorization: auth } })).json().codes;
+    expect(await get()).toEqual([]);
+    const put = await app.inject({ method: 'PUT', url: '/v1/favorites/1000004762', headers: { authorization: auth } });
+    expect(put.json()).toEqual({ code: '1000004762', favorite: true });
+    await app.inject({ method: 'PUT', url: '/v1/favorites/1000004762', headers: { authorization: auth } });
+    await app.inject({ method: 'PUT', url: '/v1/favorites/1000004764', headers: { authorization: auth } });
+    expect(await get()).toEqual(['1000004762', '1000004764']);
+    await app.inject({ method: 'DELETE', url: '/v1/favorites/1000004762', headers: { authorization: auth } });
+    expect(await get()).toEqual(['1000004764']);
+    expect((await app.inject({ method: 'PUT', url: '/v1/favorites/abc', headers: { authorization: auth } })).statusCode).toBe(400);
+    expect(repo.favorites.size).toBe(1);
+  });
+
+  test('favourites are unavailable until the table exists, and /me says so', async () => {
+    repo.favoritesEnabled = false;
+    expect((await app.inject({ method: 'GET', url: '/v1/favorites', headers: { authorization: auth } })).statusCode).toBe(503);
+    const me = await app.inject({ method: 'GET', url: '/v1/me', headers: { authorization: auth } });
+    expect(me.json().capabilities.favorites).toBe(false);
+  });
+
+  test('the members an officer registered are listed with where each stands', async () => {
+    repo.registered = [{ code: '1000004770', firstName: 'Abena', lastName: 'Owusu', phone: '0244000000', sex: 'Female', birthDate: '1990-01-01', statusCode: 'PND', createdAt: new Date('2026-11-25T10:00:00Z') }];
+    const res = await app.inject({ method: 'GET', url: '/v1/registrations', headers: { authorization: auth } });
+    expect(res.json().items).toEqual([
+      { memberCode: '1000004770', firstName: 'Abena', lastName: 'Owusu', phone: '0244000000', sex: 'Female', birthDate: '1990-01-01', status: 'PND', createdAt: '2026-11-25T10:00:00.000Z' },
+    ]);
   });
 });

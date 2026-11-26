@@ -1,13 +1,13 @@
 import { Ionicons } from '@expo/vector-icons';
 import { useEffect, useState } from 'react';
-import { FlatList, Switch, Text, View } from 'react-native';
+import { FlatList, Pressable, Switch, Text, View } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { ago, ghs } from '@/domain/home';
 import { officeLine } from '@/domain/office';
 import { documentSummary, fullName, type RegistrationItem } from '@/domain/registration';
 import { PRODUCT_LABELS, type OutboxItem } from '@/domain/types';
 import { useApp } from '@/state/AppProvider';
-import { useSignOut } from '@/state/use-sign-out';
+import { useForgetAccount, useSignOut } from '@/state/use-sign-out';
 import { KV_PULLED_AT } from '@/sync/engine';
 import { AccountMenu } from '@/ui/account-menu';
 import { AppearanceCard } from '@/ui/appearance-card';
@@ -50,6 +50,7 @@ export default function SyncTab() {
   const waiting = (items ?? []).filter((i) => isWaiting(i.status)).length + registrations.filter((r) => isWaiting(r.status)).length;
 
   const confirmSignOut = useSignOut();
+  const confirmForget = useForgetAccount();
 
   const report = lastReport
     ? describeReport(lastReport.offline, lastReport.authError, lastReport.pushed, lastReport.registrationsSent, lastReport.pulledMembers)
@@ -170,6 +171,9 @@ export default function SyncTab() {
         <View style={{ marginTop: 12, gap: 16 }}>
           <AppearanceCard />
           <Button title="Sign out" variant="danger" onPress={confirmSignOut} />
+          <Pressable accessibilityRole="button" onPress={confirmForget} style={{ alignItems: 'center', padding: 8 }}>
+            <Text style={{ color: colors.muted, fontSize: 13 }}>Remove my data from this phone</Text>
+          </Pressable>
         </View>
       }
     />

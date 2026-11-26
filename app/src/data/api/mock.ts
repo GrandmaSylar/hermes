@@ -2,24 +2,7 @@ import { DEFAULT_MEMBER_TYPES, type MemberTypeOption } from '@/domain/registrati
 import { kindForProduct, sumBalances } from '@/domain/deposit';
 import { toMinor } from '@/domain/money';
 import type { AccountOption, MobilizerLimits, Session } from '@/domain/types';
-import {
-  ApiError,
-  type ApiClient,
-  type DocumentResult,
-  type DocumentUpload,
-  type ApiCapabilities,
-  type MemberPage,
-  type OfficeDecision,
-  type SavingsAccountPage,
-  type SignInResult,
-  type PushItem,
-  type MemberConflict,
-  type MemberLookup,
-  type PushRegistration,
-  type PushResult,
-  type RegistrationResult,
-  type ServerMember,
-} from './contract';
+import { ApiError, type ApiClient, type DocumentResult, type DocumentUpload, type ApiCapabilities, type MemberPage, type OfficeDecision, type SavingsAccountPage, type SignInResult, type PushItem, type MemberConflict, type MemberLookup, type PushRegistration, type PushResult, type RegistrationResult, type ServerMember, type ServerDeposit, type ServerRegistration } from './contract';
 
 /**
  * In-app stand-in for the core system's field API, used until the real
@@ -115,6 +98,7 @@ export class MockApi implements ApiClient {
       otp: true,
       registration: true,
       documents: true,
+      favorites: true,
       officeDecisions: true,
       mobileMoney: options.mobileMoney ?? false,
       shareContribution: true,
@@ -226,6 +210,32 @@ export class MockApi implements ApiClient {
 
   /** KYC files received, as "memberCode:kind" -> size in bytes. */
   readonly documents = new Map<string, number>();
+
+  /** What the "server" remembers for the signed-in officer: favourites, and deposits and members from before this phone. */
+  readonly favoriteCodes = new Set<string>();
+  readonly priorDeposits: ServerDeposit[] = [];
+  readonly priorRegistrations: ServerRegistration[] = [];
+
+  async pullFavorites(_session: Session): Promise<string[]> {
+    this.guard();
+    return [...this.favoriteCodes].sort();
+  }
+
+  async setFavorite(_session: Session, memberCode: string, on: boolean): Promise<void> {
+    this.guard();
+    if (on) this.favoriteCodes.add(memberCode);
+    else this.favoriteCodes.delete(memberCode);
+  }
+
+  async pullDeposits(_session: Session, _since: string | null): Promise<ServerDeposit[]> {
+    this.guard();
+    return [...this.priorDeposits];
+  }
+
+  async pullRegisteredMembers(_session: Session, _since: string | null): Promise<ServerRegistration[]> {
+    this.guard();
+    return [...this.priorRegistrations];
+  }
 
   async uploadDocument(_session: Session, memberCode: string, upload: DocumentUpload): Promise<DocumentResult> {
     this.guard();

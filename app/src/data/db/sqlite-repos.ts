@@ -1,15 +1,6 @@
 import type * as SQLite from 'expo-sqlite';
 import type { OfficeDecision, SavingsAccountInfo, ServerMember } from '@/data/api/contract';
-import type {
-  FileToSend,
-  KvRepo,
-  MemberRepo,
-  NewOutboxItem,
-  NewRegistration,
-  OutboxRepo,
-  RegistrationRepo,
-  Repos,
-} from '@/data/repositories';
+import type { FileToSend, KvRepo, MemberRepo, NewOutboxItem, NewRegistration, OutboxRepo, RegistrationRepo, Repos, ImportedDeposit, ImportedRegistration } from '@/data/repositories';
 import type { UnsyncedTotals } from '@/domain/capture';
 import type { RegistrationFile, RegistrationItem } from '@/domain/registration';
 import { queryWords } from '@/domain/member-search';
@@ -271,6 +262,21 @@ class SqliteMemberRepo implements MemberRepo {
     }
   }
 
+  async favoriteCodes(): Promise<string[]> {
+    const rows = await this.db.getAllAsync<{ member_code: string }>('SELECT member_code FROM members WHERE my_customer = 1 ORDER BY member_code');
+    return rows.map((r) => r.member_code);
+  }
+
+  async setFavorites(codes: string[]): Promise<void> {
+    await this.db.withTransactionAsync(async () => {
+      await this.db.runAsync('UPDATE members SET my_customer = 0 WHERE my_customer = 1');
+      for (let i = 0; i < codes.length; i += 400) {
+        const chunk = codes.slice(i, i + 400);
+        await this.db.runAsync(`UPDATE members SET my_customer = 1 WHERE member_code IN (${chunk.map(() => '?').join(', ')})`, ...chunk);
+      }
+    });
+  }
+
   async setMyCustomer(memberCode: string, value: boolean): Promise<void> {
     await this.db.runAsync('UPDATE members SET my_customer = ? WHERE member_code = ?', value ? 1 : 0, memberCode);
   }
@@ -385,6 +391,33 @@ class SqliteOutboxRepo implements OutboxRepo {
       day,
     );
     return rows.map(toOutbox);
+  }
+
+  async importDeposits(items: ImportedDeposit[]): Promise<number> {
+    let added = 0;
+    await this.db.withTransactionAsync(async () => {
+      for (const i of items) {
+        const result = await this.db.runAsync(
+          `INSERT OR IGNORE INTO outbox
+           (local_txn_id, member_code, member_name, product_type, amount, reference, collected_at, status, attempts, server_id, created_at,
+            account_id, account_label, payment_mode, office_status, office_reason, office_decided_at)
+           VALUES (?, ?, ?, ?, ?, NULL, ?, 'SYNCED', 0, ?, ?, NULL, NULL, 'CASH', ?, ?, ?)`,
+          i.localTransactionId,
+          i.memberCode,
+          i.memberName,
+          i.productType,
+          i.amount,
+          i.collectedAt,
+          i.serverId,
+          i.collectedAt,
+          i.officeStatus,
+          i.officeReason,
+          i.officeDecidedAt,
+        );
+        added += result.changes;
+      }
+    });
+    return added;
   }
 
   async inRange(fromDay: string, toDay: string): Promise<OutboxItem[]> {
@@ -664,6 +697,33 @@ class SqliteRegistrationRepo implements RegistrationRepo {
       day,
     );
     return this.withFiles(rows);
+  }
+
+  async importRegistrations(items: ImportedRegistration[]): Promise<number> {
+    let added = 0;
+    await this.db.withTransactionAsync(async () => {
+      for (const i of items) {
+        const known = await this.db.getFirstAsync<{ n: number }>('SELECT COUNT(*) AS n FROM registrations WHERE server_id = ?', i.serverId);
+        if (known && known.n > 0) continue;
+        const result = await this.db.runAsync(
+          `INSERT OR IGNORE INTO registrations
+           (local_reg_id, first_name, last_name, gender, date_of_birth, phone, id_type, id_number, address,
+            captured_at, status, attempts, server_id, created_at, payload)
+           VALUES (?, ?, ?, ?, ?, ?, 'NATIONAL_ID', '', '', ?, 'SYNCED', 0, ?, ?, NULL)`,
+          `server-${i.serverId}`,
+          i.firstName,
+          i.lastName,
+          i.gender,
+          i.dateOfBirth,
+          i.phone,
+          i.capturedAt,
+          i.serverId,
+          i.capturedAt,
+        );
+        added += result.changes;
+      }
+    });
+    return added;
   }
 
   async inRange(fromDay: string, toDay: string): Promise<RegistrationItem[]> {

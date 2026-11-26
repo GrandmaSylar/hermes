@@ -134,3 +134,16 @@ The server is a plain Node app, so it can run under pm2 instead of a container (
 Check after deploying: `GET /health` returns `{"status":"ok"}` and a sign-in works.
 
 Point the app at `https://<domain>` with `EXPO_PUBLIC_API_URL`.
+
+## Favourites and history follow the officer
+
+A field officer's favourite members and past work are kept for the person, not the phone, so signing in on another
+phone (or after a reinstall) shows the same favourites and history.
+
+- **Deposits** already live in the core database; `GET /v1/deposits` lists the officer's own (up to 500, newest first).
+- **Registrations**: `GET /v1/registrations` lists the members the officer registered (`Customer.CreatedBy`).
+- **Favourites** need one small table, `dbo.FieldOfficerFavorite`, which the database owner creates once with
+  `deploy/create-favorites.sql` (it also grants the field login SELECT, INSERT and UPDATE on it; rows are switched
+  off, never deleted). `GET /v1/favorites`, `PUT /v1/favorites/:code` and `DELETE /v1/favorites/:code` use it. Until
+  the table exists the server reports `favoritesEnabled: false` under `/health`, `/v1/me` says
+  `capabilities.favorites: false`, and phones keep favourites on the phone only.
