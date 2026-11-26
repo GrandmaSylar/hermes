@@ -44,6 +44,9 @@ function Screens() {
           <Stack.Screen name="(tabs)" options={{ headerShown: false, animation: 'fade' }} />
           <Stack.Screen name="member/[code]" options={{ title: 'Member' }} />
           <Stack.Screen name="collect/[code]" options={{ title: '', animation: 'fade_from_bottom' }} />
+          <Stack.Screen name="transaction/[id]" options={{ title: 'Deposit' }} />
+          <Stack.Screen name="registration/[id]" options={{ title: 'Registration' }} />
+          <Stack.Screen name="receipt" options={{ title: 'Receipt' }} />
           <Stack.Screen name="register" options={{ title: 'Register member', animation: 'fade_from_bottom' }} />
         </Stack.Protected>
       </Stack>

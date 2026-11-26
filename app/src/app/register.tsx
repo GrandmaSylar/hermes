@@ -216,7 +216,8 @@ export default function RegisterScreen() {
           </Text>
           <Text style={{ color: colors.muted, marginTop: 8, fontSize: 12 }}>Ref {saved.localRegistrationId.slice(0, 8).toUpperCase()}</Text>
         </Card>
-        <Button title="Done" onPress={() => router.dismissTo('/(tabs)')} />
+        <Button title="Print or save slip" onPress={() => router.push({ pathname: '/receipt', params: { kind: 'registration', id: saved.localRegistrationId } })} />
+        <Button title="Done" variant="secondary" onPress={() => router.dismissTo('/(tabs)')} />
         <Button title="Register another member" variant="secondary" onPress={startOver} />
       </ScrollView>
     );

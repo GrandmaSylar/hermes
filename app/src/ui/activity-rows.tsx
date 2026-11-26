@@ -93,7 +93,7 @@ export function DepositRow({ item, last, withDay }: { item: OutboxItem; last: bo
       status={status}
       note={note}
       last={last}
-      onPress={() => router.push(`/member/${item.memberCode}`)}
+      onPress={() => router.push(`/transaction/${item.localTransactionId}`)}
     />
   );
 }
@@ -111,7 +111,7 @@ export function RegistrationRow({ item, member, last, withDay }: { item: Registr
       status={status}
       note={note}
       last={last}
-      onPress={item.serverId ? () => router.push(`/member/${item.serverId}`) : undefined}
+      onPress={() => router.push(`/registration/${item.localRegistrationId}`)}
     />
   );
 }
