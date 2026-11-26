@@ -153,3 +153,18 @@ describe('credit union logo over HTTP', () => {
     expect(calls).toHaveLength(3);
   });
 });
+
+describe('member photo over HTTP', () => {
+  test('is downloaded, reported unchanged when current, and null when there is none', async () => {
+    const answers = [
+      { status: 200, body: { version: 'p1', mimeType: 'image/jpeg', dataBase64: '/9j/AAAA' } },
+      { status: 200, body: { version: 'p1', mimeType: 'image/jpeg', dataBase64: null, unchanged: true } },
+      { status: 200, body: { version: null, mimeType: null, dataBase64: null } },
+    ];
+    const { api, calls } = make({ 'GET /v1/members/1000004764/photo': () => answers.shift()! });
+    expect(await api.fetchMemberPhoto(session, '1000004764', null)).toEqual({ version: 'p1', mimeType: 'image/jpeg', dataBase64: '/9j/AAAA' });
+    expect(await api.fetchMemberPhoto(session, '1000004764', 'p1')).toBe('UNCHANGED');
+    expect(await api.fetchMemberPhoto(session, '1000004764', 'p1')).toBeNull();
+    expect(calls).toHaveLength(3);
+  });
+});

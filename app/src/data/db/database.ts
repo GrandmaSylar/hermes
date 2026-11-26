@@ -56,6 +56,7 @@ export async function wipeLocalData(db: SQLite.SQLiteDatabase): Promise<void> {
   try {
     const FileSystem = await import('expo-file-system/legacy');
     await FileSystem.deleteAsync(`${FileSystem.documentDirectory}kyc/`, { idempotent: true });
+    await FileSystem.deleteAsync(`${FileSystem.documentDirectory}photos/`, { idempotent: true });
   } catch {
     // nothing to remove
   }

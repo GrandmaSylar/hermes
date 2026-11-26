@@ -362,6 +362,16 @@ export class HttpApi implements ApiClient {
       : null;
   }
 
+  async fetchMemberPhoto(session: Session, memberCode: string, have: string | null) {
+    const query = have ? `?have=${encodeURIComponent(have)}` : '';
+    const body = asRecord(await this.send(session, 'GET', `${V1}/members/${encodeURIComponent(memberCode)}/photo${query}`));
+    const version = asText(body.version);
+    if (!version) return null;
+    if (body.unchanged === true) return 'UNCHANGED' as const;
+    const dataBase64 = asText(body.dataBase64);
+    return dataBase64 ? { version, mimeType: asText(body.mimeType) || 'image/jpeg', dataBase64 } : null;
+  }
+
   async fetchLogo(session: Session, have: string | null) {
     const query = have ? `?have=${encodeURIComponent(have)}` : '';
     const body = asRecord(await this.send(session, 'GET', `${V1}/credit-union/logo${query}`));

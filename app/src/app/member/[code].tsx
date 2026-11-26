@@ -7,6 +7,7 @@ import { depositTitle, depositUnavailableReason } from '@/domain/deposit';
 import { formatAmount } from '@/domain/money';
 import type { Member } from '@/domain/types';
 import { useApp } from '@/state/AppProvider';
+import { useMemberPhoto } from '@/state/use-member-photo';
 import { PressScale, Reveal, Skeleton, tap } from '@/ui/motion';
 import { Watermark } from '@/ui/brand';
 import { brand, brandGradient } from '@/ui/colors';
@@ -31,6 +32,7 @@ export default function MemberScreen() {
   const { repos, version, touch } = useApp();
   const insets = useSafeAreaInsets();
   const [member, setMember] = useState<Member | null | undefined>(undefined);
+  const photo = useMemberPhoto(code);
 
   useEffect(() => {
     if (!repos || !code) return;
@@ -97,7 +99,7 @@ export default function MemberScreen() {
         >
           <Watermark size={200} />
           <View style={{ padding: 4, borderRadius: 40, backgroundColor: 'rgba(255,255,255,0.25)' }}>
-            <Avatar name={member.name} size={72} tone="soft" />
+            <Avatar name={member.name} size={72} tone="soft" photo={photo} />
           </View>
           <Text selectable style={{ fontSize: 20, fontWeight: '700', color: '#FFFFFF', letterSpacing: -0.4, textAlign: 'center', marginTop: 6 }}>{member.name}</Text>
           <Text selectable style={{ color: 'rgba(255,255,255,0.85)', fontSize: 13 }}>{[member.memberCode, member.phone].filter(Boolean).join(' · ')}</Text>

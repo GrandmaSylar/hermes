@@ -194,6 +194,8 @@ export interface ApiClient {
    * The credit union's logo as a picture data URL. Pass the version already on the phone: 'UNCHANGED' comes back
    * when it is still current, null when the credit union has no logo.
    */
+  /** A member's passport photo, as base64. Pass the version already on the phone: 'UNCHANGED' when it is still current, null when there is none. */
+  fetchMemberPhoto?(session: Session, memberCode: string, have: string | null): Promise<{ version: string; mimeType: string; dataBase64: string } | 'UNCHANGED' | null>;
   fetchLogo?(session: Session, have: string | null): Promise<{ version: string; dataUri: string } | 'UNCHANGED' | null>;
   /** The office's decisions on collections changed since the given time (or the latest ones if null). */
   pullDecisions(session: Session, since: string | null): Promise<OfficeDecision[]>;

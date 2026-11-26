@@ -238,6 +238,16 @@ export function buildApp(deps: AppDeps): FastifyInstance {
     return have === logo.version ? { version: logo.version, dataUri: null, unchanged: true } : logo;
   });
 
+  // A member's passport photograph, for their profile. The phone says which version it already has.
+  app.get('/v1/members/:code/photo', { preHandler: requireOfficer }, async (req, reply) => {
+    const code = String((req.params as { code?: string }).code ?? '');
+    if (!/^\d{1,10}$/.test(code)) return fail(reply, 400, 'Invalid member number.');
+    const have = typeof (req.query as { have?: unknown }).have === 'string' ? (req.query as { have: string }).have : '';
+    const photo = await repo.getMemberPhoto(req.officer!, code);
+    if (!photo) return { version: null, mimeType: null, dataBase64: null };
+    return have === photo.version ? { version: photo.version, mimeType: photo.mimeType, dataBase64: null, unchanged: true } : photo;
+  });
+
   app.get('/v1/members', { preHandler: requireOfficer }, async (req, reply) => {
     const parsed = membersQuery.safeParse(req.query);
     if (!parsed.success) return fail(reply, 400, 'Invalid paging parameters.');

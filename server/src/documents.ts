@@ -91,3 +91,18 @@ export function logoFrom(value: unknown): { version: string; dataUri: string } |
   for (let i = 0; i < text.length; i += 1) hash = ((hash << 5) + hash + text.charCodeAt(i)) | 0;
   return { version: `${text.length.toString(16)}-${(hash >>> 0).toString(16)}`, dataUri: text };
 }
+
+/** Biggest member photograph that is sent to a phone. */
+export const MAX_PHOTO_BYTES = 5 * 1024 * 1024;
+
+/** A stored passport photograph, if it really is a picture of a sensible size. The type comes from the bytes, not from any label. */
+export function photoFrom(value: unknown): { version: string; mimeType: string; dataBase64: string } | null {
+  if (!Buffer.isBuffer(value) || value.length === 0 || value.length > MAX_PHOTO_BYTES) return null;
+  const mimeType = sniffMime(value);
+  if (!mimeType || !mimeType.startsWith('image/')) return null;
+  // Length plus a sample of the bytes: it only has to change when the picture does.
+  let hash = 5381;
+  const step = Math.max(1, Math.floor(value.length / 4096));
+  for (let i = 0; i < value.length; i += step) hash = ((hash << 5) + hash + value[i]) | 0;
+  return { version: `${value.length.toString(16)}-${(hash >>> 0).toString(16)}`, mimeType, dataBase64: value.toString('base64') };
+}

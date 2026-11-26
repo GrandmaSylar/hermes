@@ -15,6 +15,13 @@ export interface Officer {
   active: boolean;
 }
 
+export interface MemberPhoto {
+  /** Changes whenever the picture does, so the phone only downloads it again when it must. */
+  version: string;
+  mimeType: string;
+  dataBase64: string;
+}
+
 export interface CreditUnionLogo {
   /** Changes whenever the picture does, so the phone only downloads it again when it must. */
   version: string;
@@ -173,6 +180,8 @@ export interface Repo {
   getBranchInfo(branchCode: string): Promise<BranchInfo | null>;
   /** The credit union's logo as a picture data URL, or null when none is stored. */
   getLogo(branchCode: string): Promise<CreditUnionLogo | null>;
+  /** The member's passport photograph, if they have one and are in the officer's branch. */
+  getMemberPhoto(officer: Officer, memberCode: string): Promise<MemberPhoto | null>;
   listMembers(branchCode: string, afterCode: number, limit: number): Promise<MemberRow[]>;
   getAccount(kind: DepositKind, accountId: number): Promise<AccountInfo | null>;
   insertDeposit(input: DepositInput): Promise<InsertOutcome>;

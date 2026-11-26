@@ -7,6 +7,7 @@ import type {
   AccountOption,
   BranchInfo,
   CreditUnionLogo,
+  MemberPhoto,
   DepositInput,
   DepositKind,
   DepositRow,
@@ -23,7 +24,7 @@ import type { Config } from './config';
 import { smsPhone } from './sms';
 import * as registration from './mssql-registration';
 import * as documents from './mssql-documents';
-import { logoFrom, type CheckedDocument } from './documents';
+import { logoFrom, photoFrom, type CheckedDocument } from './documents';
 import type { RegistrationBody } from './registration';
 import { buildSchema, describe as describeSchema, has, nameExpr, pick, product, TABLES, type Schema } from './schema';
 
@@ -136,6 +137,27 @@ export class MssqlRepo implements Repo {
          ORDER BY ${byStaff ? 'CASE WHEN EmployeeID = @u THEN 0 ELSE 1 END, ' : ''}FieldOfficerID`,
       );
     return result.recordset[0] ? this.officerFrom(result.recordset[0]) : null;
+  }
+
+  async getMemberPhoto(officer: Officer, memberCode: string): Promise<MemberPhoto | null> {
+    if (!has(this.schema, 'CustomerMedia.MainPicture') || !has(this.schema, 'CustomerMedia.CustomerID')) return null;
+    try {
+      // Same reach as the member list: the officer's own branch, or members with no branch.
+      const result = await this.pool
+        .request()
+        .input('code', sql.VarChar(10), memberCode)
+        .input('branch', sql.VarChar(10), officer.branchCode)
+        .query(
+          `SELECT TOP 1 m.MainPicture
+           FROM dbo.Customer c JOIN dbo.CustomerMedia m ON m.CustomerID = c.CustomerID
+           WHERE c.Code = TRY_CONVERT(numeric(10,0), @code)
+             AND LTRIM(RTRIM(ISNULL(c.BranchCode, ''))) IN (@branch, '')
+             AND m.MainPicture IS NOT NULL AND DATALENGTH(m.MainPicture) > 0`,
+        );
+      return photoFrom(result.recordset[0]?.MainPicture);
+    } catch {
+      return null;
+    }
   }
 
   async getLogo(branchCode: string): Promise<CreditUnionLogo | null> {
