@@ -168,3 +168,25 @@ describe('member photo over HTTP', () => {
     expect(calls).toHaveLength(3);
   });
 });
+
+describe('the officer data over HTTP', () => {
+  test('deposits and registered members are read with what the history needs, skipping rows without an id', async () => {
+    const { api } = make({
+      'GET /v1/deposits': () => ({
+        status: 200,
+        body: { items: [
+          { serverId: 'SH7', kind: 'SHARES', localTransactionId: 'a1', memberCode: '5', amount: '40.00', status: 'approved', createdAt: '2026-11-20T09:00:00.000Z', decidedAt: null, reason: null },
+          { serverId: '1', kind: 'SAVINGS', localTransactionId: '', memberCode: '5', amount: '1.00', status: 'PENDING', createdAt: '2026-11-20T09:00:00.000Z' },
+        ] },
+      }),
+      'GET /v1/registrations': () => ({
+        status: 200,
+        body: { items: [{ memberCode: '1000004770', firstName: 'Abena', lastName: 'Owusu', phone: '0244', sex: 'Female', birthDate: '1990-01-01', status: 'pnd', createdAt: '2026-11-19T10:00:00.000Z' }, { memberCode: '' }] },
+      }),
+    });
+    const deposits = await api.pullDeposits(session, null);
+    expect(deposits).toEqual([{ localTransactionId: 'a1', serverId: 'SH7', kind: 'SHARES', memberCode: '5', amount: '40.00', status: 'APPROVED', createdAt: '2026-11-20T09:00:00.000Z', decidedAt: null, reason: null }]);
+    const regs = await api.pullRegisteredMembers(session, '2026-11-01T00:00:00.000Z');
+    expect(regs).toEqual([{ memberCode: '1000004770', firstName: 'Abena', lastName: 'Owusu', phone: '0244', sex: 'Female', birthDate: '1990-01-01', status: 'PND', createdAt: '2026-11-19T10:00:00.000Z' }]);
+  });
+});

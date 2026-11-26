@@ -1,13 +1,16 @@
 import { Ionicons } from '@expo/vector-icons';
 import { useEffect, useState } from 'react';
-import { Alert, FlatList, Switch, Text, View } from 'react-native';
+import { FlatList, Pressable, Switch, Text, View } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { ago, ghs } from '@/domain/home';
 import { officeLine } from '@/domain/office';
 import { documentSummary, fullName, type RegistrationItem } from '@/domain/registration';
 import { PRODUCT_LABELS, type OutboxItem } from '@/domain/types';
 import { useApp } from '@/state/AppProvider';
+import { useForgetAccount, useSignOut } from '@/state/use-sign-out';
 import { KV_PULLED_AT } from '@/sync/engine';
+import { AccountMenu } from '@/ui/account-menu';
+import { AppearanceCard } from '@/ui/appearance-card';
 import { Reveal, Skeleton } from '@/ui/motion';
 import { Button, Card, SectionLabel, StatusPill, colors } from '@/ui/theme';
 
@@ -30,7 +33,7 @@ function Note({ children, tone = 'muted' }: { children: React.ReactNode; tone?: 
 }
 
 export default function SyncTab() {
-  const { repos, version, syncing, syncNow, lastReport, lastSyncAt, simulateOffline, setSimulateOffline, signOut } = useApp();
+  const { repos, version, syncing, syncNow, lastReport, lastSyncAt, simulateOffline, setSimulateOffline } = useApp();
   const insets = useSafeAreaInsets();
   const [items, setItems] = useState<OutboxItem[] | null>(null);
   const [registrations, setRegistrations] = useState<RegistrationItem[]>([]);
@@ -46,12 +49,8 @@ export default function SyncTab() {
   const isWaiting = (s: OutboxItem['status']) => s === 'PENDING' || s === 'SENDING';
   const waiting = (items ?? []).filter((i) => isWaiting(i.status)).length + registrations.filter((r) => isWaiting(r.status)).length;
 
-  const confirmSignOut = async () => {
-    const done = await signOut();
-    if (!done) {
-      Alert.alert('Items are waiting to sync', 'Signing out removes the data on this phone. Sync first so no collection is lost.');
-    }
-  };
+  const confirmSignOut = useSignOut();
+  const confirmForget = useForgetAccount();
 
   const report = lastReport
     ? describeReport(lastReport.offline, lastReport.authError, lastReport.pushed, lastReport.registrationsSent, lastReport.pulledMembers)
@@ -66,7 +65,10 @@ export default function SyncTab() {
       style={{ backgroundColor: colors.bg }}
       ListHeaderComponent={
         <View style={{ gap: 16, marginBottom: 4 }}>
-          <Text style={{ fontSize: 26, fontWeight: '700', color: colors.text, letterSpacing: -0.6 }}>Sync</Text>
+          <View style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' }}>
+            <Text style={{ fontSize: 26, fontWeight: '700', color: colors.text, letterSpacing: -0.6 }}>Settings</Text>
+            <AccountMenu />
+          </View>
 
           <Reveal>
             <Card style={{ gap: 16 }}>
@@ -166,8 +168,12 @@ export default function SyncTab() {
         )
       }
       ListFooterComponent={
-        <View style={{ marginTop: 12 }}>
-          <Button title="Sign out" variant="danger" onPress={() => void confirmSignOut()} />
+        <View style={{ marginTop: 12, gap: 16 }}>
+          <AppearanceCard />
+          <Button title="Sign out" variant="danger" onPress={confirmSignOut} />
+          <Pressable accessibilityRole="button" onPress={confirmForget} style={{ alignItems: 'center', padding: 8 }}>
+            <Text style={{ color: colors.muted, fontSize: 13 }}>Remove my data from this phone</Text>
+          </Pressable>
         </View>
       }
     />

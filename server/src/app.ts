@@ -147,6 +147,8 @@ export function buildApp(deps: AppDeps): FastifyInstance {
   const registrationOn = () => repo.describeSchema?.().registrationEnabled === true;
   /** KYC files can be saved once the member media table is visible too. */
   const documentsOn = () => registrationOn() && repo.describeSchema?.().documentsEnabled === true;
+  /** Favourites can be kept on the server once their table exists and is visible. */
+  const favoritesOn = () => repo.describeSchema?.().favoritesEnabled === true;
 
   app.get('/health', async (_req, reply) => {
     try {
@@ -226,7 +228,7 @@ export function buildApp(deps: AppDeps): FastifyInstance {
       branch,
       limits: config.limits,
       pendingApproval: pending,
-      capabilities: { registration: registrationOn(), documents: documentsOn() },
+      capabilities: { registration: registrationOn(), documents: documentsOn(), favorites: favoritesOn() },
     };
   });
 
@@ -458,6 +460,48 @@ export function buildApp(deps: AppDeps): FastifyInstance {
       return { status: 'SAVED', kind: checked.kind };
     },
   );
+
+  // ---- the account follows the person, not the phone -----------------------------------------------------------
+
+  /** Favourite members, so a phone signing in again (or another phone) gets the same list. */
+  app.get('/v1/favorites', { preHandler: requireOfficer }, async (req, reply) => {
+    if (!favoritesOn()) return fail(reply, 503, 'Favourites are not switched on yet.');
+    return { codes: await repo.listFavorites(req.officer!.id) };
+  });
+
+  for (const [method, on] of [['PUT', true], ['DELETE', false]] as const) {
+    app.route({
+      method,
+      url: '/v1/favorites/:code',
+      preHandler: requireOfficer,
+      handler: async (req, reply) => {
+        if (!favoritesOn()) return fail(reply, 503, 'Favourites are not switched on yet.');
+        const code = String((req.params as { code?: string }).code ?? '');
+        if (!/^\d{1,10}$/.test(code)) return fail(reply, 400, 'Invalid member number.');
+        await repo.setFavorite(req.officer!.id, code, on);
+        return { code, favorite: on };
+      },
+    });
+  }
+
+  /** The members this officer registered, with where each stands (PND until the office approves). */
+  app.get('/v1/registrations', { preHandler: requireOfficer }, async (req, reply) => {
+    const parsed = depositsQuery.safeParse(req.query);
+    if (!parsed.success) return fail(reply, 400, 'Invalid parameters.');
+    const rows = await repo.listRegisteredMembers(req.officer!, parsed.data.since ? new Date(parsed.data.since) : null, parsed.data.limit);
+    return {
+      items: rows.map((r) => ({
+        memberCode: r.code,
+        firstName: r.firstName,
+        lastName: r.lastName,
+        phone: r.phone,
+        sex: r.sex,
+        birthDate: r.birthDate,
+        status: r.statusCode,
+        createdAt: r.createdAt,
+      })),
+    };
+  });
 
   app.get('/v1/deposits', { preHandler: requireOfficer }, async (req, reply) => {
     const parsed = depositsQuery.safeParse(req.query);

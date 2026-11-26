@@ -15,6 +15,18 @@ export interface Officer {
   active: boolean;
 }
 
+export interface RegisteredMemberRow {
+  code: string;
+  firstName: string;
+  lastName: string;
+  phone: string;
+  sex: string;
+  birthDate: string | null;
+  /** The core's member status: PND while the office has not approved. */
+  statusCode: string;
+  createdAt: Date | null;
+}
+
 export interface MemberPhoto {
   /** Changes whenever the picture does, so the phone only downloads it again when it must. */
   version: string;
@@ -182,6 +194,12 @@ export interface Repo {
   getLogo(branchCode: string): Promise<CreditUnionLogo | null>;
   /** The member's passport photograph, if they have one and are in the officer's branch. */
   getMemberPhoto(officer: Officer, memberCode: string): Promise<MemberPhoto | null>;
+  /** The member numbers this officer has marked as favourites. */
+  listFavorites(officerId: string): Promise<string[]>;
+  /** Marks or unmarks one member as this officer's favourite. Marking the same one twice changes nothing. */
+  setFavorite(officerId: string, memberCode: string, on: boolean): Promise<void>;
+  /** Members this officer registered, newest first, so a phone signing in again can list them. */
+  listRegisteredMembers(officer: Officer, since: Date | null, limit: number): Promise<RegisteredMemberRow[]>;
   listMembers(branchCode: string, afterCode: number, limit: number): Promise<MemberRow[]>;
   getAccount(kind: DepositKind, accountId: number): Promise<AccountInfo | null>;
   insertDeposit(input: DepositInput): Promise<InsertOutcome>;

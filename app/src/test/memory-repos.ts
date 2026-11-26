@@ -1,6 +1,8 @@
 import type { OfficeDecision, SavingsAccountInfo, ServerMember } from '@/data/api/contract';
 import type {
   FileToSend,
+  ImportedDeposit,
+  ImportedRegistration,
   KvRepo,
   MemberRepo,
   NewOutboxItem,
@@ -155,6 +157,19 @@ class MemoryOutbox implements OutboxRepo {
   async forDay(day: string) {
     return [...this.rows.values()].filter((i) => i.collectedAt.slice(0, 10) === day);
   }
+  async importDeposits(items: ImportedDeposit[]) {
+    let added = 0;
+    for (const i of items) {
+      if (this.rows.has(i.localTransactionId)) continue;
+      this.rows.set(i.localTransactionId, {
+        localTransactionId: i.localTransactionId, memberCode: i.memberCode, memberName: i.memberName, productType: i.productType, amount: i.amount,
+        reference: null, collectedAt: i.collectedAt, status: 'SYNCED', attempts: 0, lastError: null, serverId: i.serverId, createdAt: i.collectedAt,
+        accountId: null, accountLabel: null, paymentMode: 'CASH', officeStatus: i.officeStatus, officeReason: i.officeReason, officeDecidedAt: i.officeDecidedAt,
+      });
+      added += 1;
+    }
+    return added;
+  }
   async inRange(fromDay: string, toDay: string) {
     return [...this.rows.values()]
       .filter((i) => i.collectedAt.slice(0, 10) >= fromDay && i.collectedAt.slice(0, 10) <= toDay)
@@ -216,6 +231,19 @@ class MemoryRegistrations implements RegistrationRepo {
   }
   async forDay(day: string) {
     return [...this.rows.values()].filter((r) => r.capturedAt.slice(0, 10) === day);
+  }
+  async importRegistrations(items: ImportedRegistration[]) {
+    let added = 0;
+    for (const i of items) {
+      if ([...this.rows.values()].some((r) => r.serverId === i.serverId)) continue;
+      this.rows.set(`server-${i.serverId}`, {
+        localRegistrationId: `server-${i.serverId}`, firstName: i.firstName, lastName: i.lastName, gender: i.gender, dateOfBirth: i.dateOfBirth, phone: i.phone,
+        idType: 'NATIONAL_ID', idNumber: '', address: '', capturedAt: i.capturedAt, status: 'SYNCED', attempts: 0, lastError: null, serverId: i.serverId,
+        createdAt: i.capturedAt, payload: null, files: [],
+      });
+      added += 1;
+    }
+    return added;
   }
   async inRange(fromDay: string, toDay: string) {
     return [...this.rows.values()]

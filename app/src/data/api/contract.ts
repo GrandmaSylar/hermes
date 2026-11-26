@@ -145,6 +145,32 @@ export interface OfficeProfile {
   city: string;
 }
 
+/** One of the officer's deposits as the server holds it, for rebuilding history on a phone that has none. */
+export interface ServerDeposit {
+  localTransactionId: string;
+  serverId: string;
+  kind: 'SAVINGS' | 'SHARES';
+  memberCode: string;
+  amount: string;
+  status: string;
+  createdAt: string;
+  decidedAt: string | null;
+  reason: string | null;
+}
+
+/** A member the officer registered, as the server holds them. */
+export interface ServerRegistration {
+  memberCode: string;
+  firstName: string;
+  lastName: string;
+  phone: string;
+  sex: string;
+  birthDate: string | null;
+  /** The core's member status: PND until the office approves. */
+  status: string;
+  createdAt: string | null;
+}
+
 export interface ApiCapabilities {
   /** The server can say what the office decided about each collection. */
   officeDecisions: boolean;
@@ -196,6 +222,10 @@ export interface ApiClient {
    */
   /** A member's passport photo, as base64. Pass the version already on the phone: 'UNCHANGED' when it is still current, null when there is none. */
   fetchMemberPhoto?(session: Session, memberCode: string, have: string | null): Promise<{ version: string; mimeType: string; dataBase64: string } | 'UNCHANGED' | null>;
+  /** The officer's deposits (newest first, up to 500), optionally only those created or decided since a time. */
+  pullDeposits?(session: Session, since: string | null): Promise<ServerDeposit[]>;
+  /** The members the officer registered (newest first, up to 500). */
+  pullRegisteredMembers?(session: Session, since: string | null): Promise<ServerRegistration[]>;
   fetchLogo?(session: Session, have: string | null): Promise<{ version: string; dataUri: string } | 'UNCHANGED' | null>;
   /** The office's decisions on collections changed since the given time (or the latest ones if null). */
   pullDecisions(session: Session, since: string | null): Promise<OfficeDecision[]>;

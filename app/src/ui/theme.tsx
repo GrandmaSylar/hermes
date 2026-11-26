@@ -1,19 +1,20 @@
 import { Image } from 'expo-image';
 import { useRef, useState } from 'react';
-import { Animated, Text, TextInput, View, type TextInputProps } from 'react-native';
+import { Animated, Text, TextInput, View, type TextInputInstance, type TextInputProps } from 'react-native';
 import type { OutboxStatus } from '@/domain/types';
 import { colors } from '@/ui/colors';
 import { Dots, PressScale } from '@/ui/motion';
 
 export { colors };
 
-export const STATUS_STYLE: Record<OutboxStatus, { label: string; fg: string; bg: string }> = {
-  PENDING: { label: 'Waiting to sync', fg: colors.warn, bg: colors.warnBg },
-  SENDING: { label: 'Syncing…', fg: colors.primary, bg: colors.primarySoft },
-  SYNCED: { label: 'Pending approval', fg: colors.ok, bg: colors.okBg },
-  REJECTED: { label: 'Rejected', fg: colors.danger, bg: colors.dangerBg },
-  CONFLICT: { label: 'Needs attention', fg: colors.danger, bg: colors.dangerBg },
-};
+export const statusStyle = (status: OutboxStatus): { label: string; fg: string; bg: string } =>
+  ({
+    PENDING: { label: 'Waiting to sync', fg: colors.warn, bg: colors.warnBg },
+    SENDING: { label: 'Syncing…', fg: colors.primary, bg: colors.primarySoft },
+    SYNCED: { label: 'Pending approval', fg: colors.ok, bg: colors.okBg },
+    REJECTED: { label: 'Rejected', fg: colors.danger, bg: colors.dangerBg },
+    CONFLICT: { label: 'Needs attention', fg: colors.danger, bg: colors.dangerBg },
+  })[status];
 
 /** The look shared by every card and sheet. */
 export const RADIUS = { borderCurve: 'continuous' as const };
@@ -61,8 +62,8 @@ export function Button(props: {
 }
 
 /** A labelled text box: filled, rounded, with a ring that fades in when it has focus. */
-export function Field(props: TextInputProps & { label: string; error?: string | null }) {
-  const { label, error, style, onFocus, onBlur, ...rest } = props;
+export function Field(props: TextInputProps & { label: string; error?: string | null; trailing?: React.ReactNode; inputRef?: React.Ref<TextInputInstance> }) {
+  const { label, error, style, onFocus, onBlur, trailing, inputRef, ...rest } = props;
   const [focused, setFocused] = useState(false);
   const ring = useRef(new Animated.Value(0)).current;
   const to = (v: number) => Animated.timing(ring, { toValue: v, duration: 160, useNativeDriver: false }).start();
@@ -73,12 +74,15 @@ export function Field(props: TextInputProps & { label: string; error?: string | 
         style={{
           borderRadius: 14,
           borderWidth: 1.5,
-          backgroundColor: ring.interpolate({ inputRange: [0, 1], outputRange: ['#EEF1F6', '#FFFFFF'] }),
-          borderColor: error ? colors.danger : ring.interpolate({ inputRange: [0, 1], outputRange: ['#EEF1F6', colors.primary] }),
+          backgroundColor: ring.interpolate({ inputRange: [0, 1], outputRange: [colors.fill, colors.card] }),
+          borderColor: error ? colors.danger : ring.interpolate({ inputRange: [0, 1], outputRange: [colors.fill, colors.primary] }),
+          flexDirection: 'row',
+          alignItems: 'center',
           ...RADIUS,
         }}
       >
         <TextInput
+          ref={inputRef}
           placeholderTextColor={colors.muted}
           onFocus={(e) => {
             setFocused(true);
@@ -90,9 +94,10 @@ export function Field(props: TextInputProps & { label: string; error?: string | 
             to(0);
             onBlur?.(e);
           }}
-          style={[{ minHeight: 52, paddingHorizontal: 14, fontSize: 15, color: colors.text }, style]}
+          style={[{ flex: 1, minHeight: 52, paddingHorizontal: 14, fontSize: 15, color: colors.text }, style]}
           {...rest}
         />
+        {trailing}
       </Animated.View>
       {error ? <Text style={{ color: colors.danger, fontSize: 12, marginTop: 6, marginLeft: 2 }}>{error}</Text> : null}
     </View>
@@ -100,7 +105,7 @@ export function Field(props: TextInputProps & { label: string; error?: string | 
 }
 
 export function StatusPill({ status }: { status: OutboxStatus }) {
-  const s = STATUS_STYLE[status];
+  const s = statusStyle(status);
   return (
     <View style={{ alignSelf: 'flex-start', borderRadius: 999, paddingHorizontal: 10, paddingVertical: 4, backgroundColor: s.bg }}>
       <Text style={{ fontSize: 12, fontWeight: '700', color: s.fg }}>{s.label}</Text>

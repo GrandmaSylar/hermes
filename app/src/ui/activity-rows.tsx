@@ -23,11 +23,12 @@ const PRODUCT_ICON: Record<ProductType, IconName> = {
   LOAN_REPAYMENT: 'card-outline',
 };
 
-const STATUS_COLOR: Record<HistoryStatus, { fg: string; bg: string }> = {
-  PENDING: { fg: colors.warn, bg: colors.warnBg },
-  APPROVED: { fg: colors.ok, bg: colors.okBg },
-  REJECTED: { fg: colors.danger, bg: colors.dangerBg },
-};
+const statusColor = (status: HistoryStatus): { fg: string; bg: string } =>
+  ({
+    PENDING: { fg: colors.warn, bg: colors.warnBg },
+    APPROVED: { fg: colors.ok, bg: colors.okBg },
+    REJECTED: { fg: colors.danger, bg: colors.dangerBg },
+  })[status];
 
 export function Tappable(props: { onPress?: () => void; label: string; children: React.ReactNode; style?: object; disabled?: boolean }) {
   return (
@@ -38,7 +39,7 @@ export function Tappable(props: { onPress?: () => void; label: string; children:
 }
 
 export function StatusBadge({ status }: { status: HistoryStatus }) {
-  const c = STATUS_COLOR[status];
+  const c = statusColor(status);
   return (
     <View style={{ alignSelf: 'flex-end', paddingHorizontal: 8, paddingVertical: 2, borderRadius: 999, backgroundColor: c.bg }}>
       <Text style={{ fontSize: 11, fontWeight: '700', color: c.fg }}>{STATUS_WORDS[status]}</Text>

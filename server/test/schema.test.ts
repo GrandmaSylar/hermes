@@ -20,6 +20,7 @@ const REGISTRATION_TABLES = [
   ...table('CustomerGuardian', ['CustomerID']),
   ...table('CustomerCompliance', ['CustomerID']),
   ...table('CustomerMedia', ['CustomerID', 'MainPicture', 'MainSignature', 'NationalIdentity', 'PictureTwo', 'CreatedAt']),
+  ...table('FieldOfficerFavorite', ['FieldOfficerID', 'MemberCode', 'IsActive']),
 ];
 
 function rows(over: { oldProducts?: boolean; noShares?: boolean; noSms?: boolean; noRegistration?: boolean } = {}): ColumnRow[] {

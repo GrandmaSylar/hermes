@@ -1,9 +1,10 @@
 import { ApiError, type ApiClient, type PushItem, type PushRegistration } from '@/data/api/contract';
 import type { FileStore } from '@/data/files';
-import type { Repos } from '@/data/repositories';
+import type { ImportedDeposit, Repos } from '@/data/repositories';
 import type { RegistrationItem } from '@/domain/registration';
 import { kindForProduct } from '@/domain/deposit';
 import type { OutboxItem, Session } from '@/domain/types';
+import { toImportedDeposit, toImportedRegistration } from './account-data';
 
 export interface SyncReport {
   pushed: number;
@@ -22,6 +23,8 @@ export interface SyncReport {
   accountsPulled: number;
   /** Collections whose office decision (approved, verified, refused) changed. */
   decisionsUpdated: number;
+  /** Deposits and registrations added from the server's record of this officer. */
+  activityImported: number;
   /** The core system answered with an error the user cannot fix by retrying immediately. */
   serverError: string | null;
   /** The server could not be reached; items were left waiting. */
@@ -55,6 +58,8 @@ const KV_ACCOUNTS_CURSOR = 'accounts.cursor';
 const KV_DECISIONS_SINCE = 'decisions.since';
 /** The member types the registration form offers, as last fetched (JSON). */
 export const KV_OFFICE = 'office.profile';
+/** When the officer's server-side history was last asked for. Empty on a new phone, which then gets it all. */
+const KV_ACTIVITY_SINCE = 'activity.since';
 export const KV_LOGO = 'office.logo';
 export const KV_LOGO_VERSION = 'office.logoVersion';
 export const KV_MEMBER_TYPES = 'registration.memberTypes';
@@ -108,6 +113,7 @@ async function run(deps: SyncDeps): Promise<SyncReport> {
     documentsRejected: 0,
     accountsPulled: 0,
     decisionsUpdated: 0,
+    activityImported: 0,
     serverError: null,
     offline: false,
     authError: false,
@@ -173,6 +179,8 @@ async function run(deps: SyncDeps): Promise<SyncReport> {
 
     await pullDecisions(deps, report);
     await pullMembersIfStale(deps, report);
+    // The officer's own history follows them to this phone (needs the members, so after them).
+    await pullActivity(deps, report);
   } catch (error) {
     if (error instanceof ApiError && error.kind === 'NETWORK') report.offline = true;
     else if (error instanceof ApiError && error.kind === 'AUTH') report.authError = true;
@@ -180,6 +188,31 @@ async function run(deps: SyncDeps): Promise<SyncReport> {
     else throw error;
   }
   return report;
+}
+
+/**
+ * Fills the phone's history from the server: deposits and registrations this officer made on another phone, or
+ * before the app was reinstalled. Anything already on the phone is left alone.
+ */
+async function pullActivity(deps: SyncDeps, report: SyncReport): Promise<void> {
+  const { repos, api, session } = deps;
+  if (!api.pullDeposits && !api.pullRegisteredMembers) return;
+  const now = (deps.now ?? (() => new Date()))();
+  const since = await repos.kv.get(KV_ACTIVITY_SINCE);
+
+  const deposits = api.pullDeposits ? await api.pullDeposits(session, since) : [];
+  const ready: ImportedDeposit[] = [];
+  for (const d of deposits) {
+    const member = await repos.members.get(d.memberCode);
+    const item = toImportedDeposit(d, member?.name ?? null);
+    if (item) ready.push(item);
+  }
+  report.activityImported += await repos.outbox.importDeposits(ready);
+
+  const registered = api.pullRegisteredMembers ? await api.pullRegisteredMembers(session, since) : [];
+  report.activityImported += await repos.registrations.importRegistrations(registered.flatMap((r) => toImportedRegistration(r) ?? []));
+
+  await repos.kv.set(KV_ACTIVITY_SINCE, new Date(now.getTime() - DECISION_OVERLAP_MS).toISOString());
 }
 
 /**

@@ -6,6 +6,7 @@ import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import type { Member } from '@/domain/types';
 import { useApp } from '@/state/AppProvider';
 import { RADIUS, SHADOW } from '@/ui/theme';
+import { AccountMenu } from '@/ui/account-menu';
 import { PressScale, Reveal, SkeletonRow } from '@/ui/motion';
 import { Avatar, Card, colors } from '@/ui/theme';
 
@@ -21,7 +22,7 @@ function MemberRow({ member, index }: { member: Member; index: number }) {
           <View style={{ flex: 1, gap: 2 }}>
             <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6 }}>
               <Text numberOfLines={1} style={{ flexShrink: 1, fontSize: 15, color: colors.text, fontWeight: '700' }}>{member.name}</Text>
-              {member.myCustomer ? <Ionicons name="star" size={14} color="#F5A623" /> : null}
+              {member.myCustomer ? <Ionicons name="star" size={14} color={colors.star} /> : null}
             </View>
             <Text numberOfLines={1} style={{ color: colors.muted, fontSize: 12 }}>{[member.memberCode, member.phone].filter(Boolean).join(' · ')}</Text>
             {status ? (
@@ -30,7 +31,7 @@ function MemberRow({ member, index }: { member: Member; index: number }) {
               </View>
             ) : null}
           </View>
-          <Ionicons name="chevron-forward" size={18} color="#C4C9D4" />
+          <Ionicons name="chevron-forward" size={18} color={colors.faint} />
         </View>
       </PressScale>
     </Reveal>
@@ -99,7 +100,10 @@ export default function MembersTab() {
       contentContainerStyle={{ paddingTop: insets.top + 12, paddingHorizontal: 16, paddingBottom: 32, gap: 10 }}
       ListHeaderComponent={
         <View style={{ gap: 14, marginBottom: 6 }}>
-          <Text style={{ fontSize: 26, fontWeight: '700', color: colors.text, letterSpacing: -0.6 }}>{mode === 'deposit' ? 'Take a deposit' : 'Members'}</Text>
+          <View style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' }}>
+            <Text style={{ fontSize: 26, fontWeight: '700', color: colors.text, letterSpacing: -0.6 }}>{mode === 'deposit' ? 'Take a deposit' : 'Members'}</Text>
+            <AccountMenu />
+          </View>
           {mode === 'deposit' ? (
             <Reveal>
               <View style={{ flexDirection: 'row', gap: 10, alignItems: 'center', backgroundColor: colors.primarySoft, borderRadius: 16, padding: 14, ...RADIUS }}>
@@ -116,7 +120,7 @@ export default function MembersTab() {
               minHeight: 50,
               paddingHorizontal: 14,
               borderRadius: 14,
-              backgroundColor: focused ? colors.card : '#E8ECF2',
+              backgroundColor: focused ? colors.card : colors.fill,
               borderWidth: 1.5,
               borderColor: focused ? colors.primary : 'transparent',
               ...RADIUS,

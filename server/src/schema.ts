@@ -21,6 +21,8 @@ export interface Schema {
   registration: boolean;
   /** KYC files can be saved: the member media table is visible to this login. */
   documents: boolean;
+  /** Each officer's favourite members can be kept on the server: the favourites table exists and is visible. */
+  favorites: boolean;
 }
 
 export const TABLES = [
@@ -36,6 +38,7 @@ export const TABLES = [
   'AppSettings',
   'Branch',
   'OrganizationSettings',
+  'FieldOfficerFavorite',
   'CustomerContact',
   'CustomerAlertPreferences',
   'MobileTransactionRejection',
@@ -53,6 +56,8 @@ export const TABLES = [
   'MemberAuthorizationProfile',
   'MemberAuthorizationCredential',
 ] as const;
+
+const MIN_FAVORITES = ['FieldOfficerFavorite.FieldOfficerID', 'FieldOfficerFavorite.MemberCode', 'FieldOfficerFavorite.IsActive'];
 
 const MIN_BASE = [
   'FieldOfficer.FieldOfficerID', 'FieldOfficer.Username', 'FieldOfficer.PasswordHash', 'FieldOfficer.BranchCode',
@@ -116,8 +121,9 @@ export function buildSchema(rows: ColumnRow[]): { schema: Schema; sharesMissing:
   if (!phone) smsMissing.push('a member phone column');
   const registrationMissing = lacking(MIN_REGISTRATION);
   const documentsMissing = lacking(MIN_DOCUMENTS);
+  const favoritesMissing = lacking(MIN_FAVORITES);
   return {
-    schema: { cols, shares: sharesMissing.length === 0, sms: smsMissing.length === 0, registration: registrationMissing.length === 0, documents: registrationMissing.length === 0 && documentsMissing.length === 0 },
+    schema: { cols, shares: sharesMissing.length === 0, sms: smsMissing.length === 0, registration: registrationMissing.length === 0, documents: registrationMissing.length === 0 && documentsMissing.length === 0, favorites: favoritesMissing.length === 0 },
     sharesMissing,
     smsMissing,
     registrationMissing,
@@ -136,6 +142,7 @@ export function describe(s: Schema): Record<string, boolean> {
     smsAvailable: s.sms,
     registrationEnabled: s.registration,
     documentsEnabled: s.documents,
+    favoritesEnabled: s.favorites,
     savingsProductActiveRule: has(s, 'SavingsProduct.IsActive') && has(s, 'SavingsProduct.Code'),
     savingsMinDepositRule: has(s, 'SavingsProduct.MinimumDeposit') && has(s, 'SavingsProduct.Code'),
     savingsMaxDepositRule: has(s, 'SavingsProduct.MaximumDeposit') && has(s, 'SavingsProduct.Code'),

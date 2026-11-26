@@ -1,5 +1,4 @@
 import { Ionicons } from '@expo/vector-icons';
-import { Redirect } from 'expo-router';
 import { Text, View } from 'react-native';
 import { useApp } from '@/state/AppProvider';
 import { CuaEmblem } from '@/ui/brand';
@@ -12,12 +11,15 @@ export default function Index() {
 
   if (status === 'loading') {
     return (
-      <View style={{ flex: 1, alignItems: 'center', justifyContent: 'center', gap: 20, backgroundColor: '#FFFFFF' }}>
+      <View style={{ flex: 1, alignItems: 'center', justifyContent: 'center', gap: 20, backgroundColor: colors.bg }}>
         <BrandLoader size={150}>
-          <CuaEmblem size={96} />
+          {/* The emblem is navy and red, so it always sits on white */}
+          <View style={{ width: 104, height: 104, borderRadius: 52, backgroundColor: '#FFFFFF', alignItems: 'center', justifyContent: 'center' }}>
+            <CuaEmblem size={76} />
+          </View>
         </BrandLoader>
         <Reveal style={{ alignItems: 'center', gap: 4 }}>
-          <Text style={{ color: '#03305C', fontSize: 18, fontWeight: '700', letterSpacing: -0.3 }}>QSS Mobile Banking</Text>
+          <Text style={{ color: colors.text, fontSize: 18, fontWeight: '700', letterSpacing: -0.3 }}>QSS Mobile Banking</Text>
           <Text style={{ color: '#EA3137', fontSize: 13, fontStyle: 'italic', fontWeight: '600' }}>...building a happy family</Text>
         </Reveal>
       </View>
@@ -32,6 +34,6 @@ export default function Index() {
       </View>
     );
   }
-  if (status === 'ready') return <Redirect href="/(tabs)" />;
-  return <Redirect href="/login" />;
+  // Only shown while starting or if the app cannot start. Once that is settled the navigator moves on by itself.
+  return null;
 }

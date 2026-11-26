@@ -18,6 +18,8 @@ import {
   type RegistrationResult,
   type SavingsAccountPage,
   type ServerMember,
+  type ServerDeposit,
+  type ServerRegistration,
   type SignInResult,
 } from './contract';
 
@@ -360,6 +362,49 @@ export class HttpApi implements ApiClient {
     this.office = branch
       ? { creditUnion: asText(branch.creditUnion), branchName: asText(branch.name), branchCode: asText(branch.code), city: asText(branch.city) }
       : null;
+  }
+
+  async pullDeposits(session: Session, since: string | null): Promise<ServerDeposit[]> {
+    const body = asRecord(await this.send(session, 'GET', `${V1}/deposits?limit=500${since ? `&since=${encodeURIComponent(since)}` : ''}`));
+    const out: ServerDeposit[] = [];
+    for (const raw of Array.isArray(body.items) ? body.items : []) {
+      const row = asRecord(raw);
+      const kind = asText(row.kind) === 'SHARES' ? 'SHARES' : 'SAVINGS';
+      const id = asText(row.localTransactionId);
+      if (!id || !asText(row.memberCode)) continue;
+      out.push({
+        localTransactionId: id,
+        serverId: asText(row.serverId),
+        kind,
+        memberCode: asText(row.memberCode),
+        amount: asText(row.amount),
+        status: asText(row.status).trim().toUpperCase(),
+        createdAt: asText(row.createdAt),
+        decidedAt: asText(row.decidedAt) || null,
+        reason: asText(row.reason) || null,
+      });
+    }
+    return out;
+  }
+
+  async pullRegisteredMembers(session: Session, since: string | null): Promise<ServerRegistration[]> {
+    const body = asRecord(await this.send(session, 'GET', `${V1}/registrations?limit=500${since ? `&since=${encodeURIComponent(since)}` : ''}`));
+    const out: ServerRegistration[] = [];
+    for (const raw of Array.isArray(body.items) ? body.items : []) {
+      const row = asRecord(raw);
+      if (!asText(row.memberCode)) continue;
+      out.push({
+        memberCode: asText(row.memberCode),
+        firstName: asText(row.firstName),
+        lastName: asText(row.lastName),
+        phone: asText(row.phone),
+        sex: asText(row.sex),
+        birthDate: asText(row.birthDate) || null,
+        status: asText(row.status).trim().toUpperCase(),
+        createdAt: asText(row.createdAt) || null,
+      });
+    }
+    return out;
   }
 
   async fetchMemberPhoto(session: Session, memberCode: string, have: string | null) {

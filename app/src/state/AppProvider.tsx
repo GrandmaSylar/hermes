@@ -2,13 +2,15 @@ import NetInfo from '@react-native-community/netinfo';
 import * as Crypto from 'expo-crypto';
 import type * as SQLite from 'expo-sqlite';
 import { createContext, useCallback, useContext, useEffect, useMemo, useRef, useState, type ReactNode } from 'react';
-import { AppState } from 'react-native';
+import { AppState, useColorScheme } from 'react-native';
 import type { ApiCapabilities, ApiClient, MemberConflict, MemberLookup } from '@/data/api/contract';
 import { HttpApi } from '@/data/api/http';
 import type { PhotoAnswer } from '@/data/photos';
+import { applyPreference, loadPreference, savePreference, type Preference } from '@/ui/appearance';
+import { applyScheme, type Scheme } from '@/ui/colors';
 import { MockApi } from '@/data/api/mock';
 import { API_MODE, API_URL } from '@/config';
-import { openDatabase, wipeLocalData } from '@/data/db/database';
+import { forgetOfficerData, openDatabase } from '@/data/db/database';
 import { createSqliteRepos } from '@/data/db/sqlite-repos';
 import { createFileStore, type FileStore } from '@/data/files';
 import type { Repos } from '@/data/repositories';
@@ -39,6 +41,8 @@ interface AppContextValue {
   capabilities: ApiCapabilities;
   /** Who already holds these IDs, phone numbers or emails. Null when there is no connection to ask. */
   checkMember: (lookup: MemberLookup) => Promise<MemberConflict[] | null>;
+  /** Light, dark (AMOLED) or follow the phone. */
+  appearance: { preference: Preference; scheme: Scheme; setPreference: (preference: Preference) => void };
   /** A member's passport photo from the office, or null when offline or there is none. */
   memberPhoto: (memberCode: string, have: string | null) => Promise<PhotoAnswer>;
   /** Where KYC pictures are kept on the phone until they are sent. */
@@ -47,8 +51,8 @@ interface AppContextValue {
   apiMode: 'http' | 'mock';
   signInOtp: (challengeId: string, otp: string) => Promise<void>;
   unlock: () => Promise<boolean>;
-  /** Returns false (and does nothing) while items are waiting to sync, unless forced. */
-  signOut: (force?: boolean) => Promise<boolean>;
+  /** Signs out. The officer's data stays on the phone unless `forget` is set. */
+  signOut: (options?: { forget?: boolean }) => Promise<boolean>;
   newId: () => string;
 }
 
@@ -61,6 +65,22 @@ export function useApp(): AppContextValue {
 }
 
 export function AppProvider({ children }: { children: ReactNode }) {
+  // The palette is swapped here, while rendering, so every screen below reads the right colours. A change in
+  // the phone's appearance (or the person's choice) re-renders this provider, and with it every screen using it.
+  const scheme: Scheme = useColorScheme() === 'dark' ? 'dark' : 'light';
+  applyScheme(scheme);
+  const [preference, setPreferenceState] = useState<Preference>('system');
+  useEffect(() => {
+    void loadPreference().then((saved) => {
+      setPreferenceState(saved);
+      applyPreference(saved);
+    });
+  }, []);
+  const setPreference = useCallback((next: Preference) => {
+    setPreferenceState(next);
+    applyPreference(next);
+    void savePreference(next);
+  }, []);
   const [status, setStatus] = useState<AppStatus>('loading');
   const [error, setError] = useState<string | null>(null);
   const [session, setSession] = useState<Session | null>(null);
@@ -102,12 +122,13 @@ export function AppProvider({ children }: { children: ReactNode }) {
     let cancelled = false;
     (async () => {
       try {
-        const db = await openDatabase();
-        if (cancelled) return;
-        dbRef.current = db;
-        setRepos(createSqliteRepos(db));
+        // Nothing is opened until we know whose data it is: each officer has a database of their own.
         const stored = await loadSession();
         if (stored) {
+          const db = await openDatabase(stored.officerId, true);
+          if (cancelled) return;
+          dbRef.current = db;
+          setRepos(createSqliteRepos(db));
           setSession(stored);
           setStatus('locked');
         } else {
@@ -160,27 +181,44 @@ export function AppProvider({ children }: { children: ReactNode }) {
     };
   }, [status]);
 
+  /** Switches to this officer's own database: opens it (creating it the first time) and lets go of the previous one. */
+  const openFor = useCallback(async (officerId: string) => {
+    const previous = dbRef.current;
+    const db = await openDatabase(officerId);
+    dbRef.current = db;
+    setRepos(createSqliteRepos(db));
+    if (previous && previous !== db) {
+      try {
+        await previous.closeAsync();
+      } catch {
+        // already closed
+      }
+    }
+  }, []);
+
   const signInPassword = useCallback(
     async (staffId: string, password: string): Promise<string | null> => {
       const result = await api.login(staffId, password, await getDeviceId());
       if (result.kind === 'OTP_REQUIRED') return result.challengeId;
+      await openFor(result.session.officerId);
       await saveSession(result.session);
       setSession(result.session);
       setStatus('ready');
       return null;
     },
-    [api],
+    [api, openFor],
   );
 
   const signInOtp = useCallback(
     async (challengeId: string, otp: string) => {
       const deviceId = await getDeviceId();
       const next = await api.verifyOtp(challengeId, otp, deviceId);
+      await openFor(next.officerId);
       await saveSession(next);
       setSession(next);
       setStatus('ready');
     },
-    [api],
+    [api, openFor],
   );
 
   const checkMember = useCallback(
@@ -210,22 +248,23 @@ export function AppProvider({ children }: { children: ReactNode }) {
   }, []);
 
   const signOut = useCallback(
-    async (force = false): Promise<boolean> => {
-      // Signing out wipes the on-device data. Refuse while collections are
-      // still waiting to sync, so cash entries are never lost by accident.
-      if (!force && repos) {
-        const unsynced = await repos.outbox.unsyncedTotals();
-        if (unsynced.count > 0 || (await repos.registrations.waitingCount()) > 0) return false;
-      }
+    async (options?: { forget?: boolean }): Promise<boolean> => {
+      // The officer's data stays on the phone, in their own database, so it is all there when they sign back in
+      // (and unsent items are still sent then). Only "forget" removes it, for a phone that is being handed on.
+      const officerId = sessionRef.current?.officerId;
       await clearSession();
       api.reset?.();
-      if (dbRef.current) await wipeLocalData(dbRef.current);
+      if (options?.forget && officerId) {
+        await forgetOfficerData(dbRef.current, officerId);
+        dbRef.current = null;
+        setRepos(null);
+      }
       setSession(null);
       setStatus('signedOut');
       touch();
       return true;
     },
-    [repos, touch, api],
+    [touch, api],
   );
 
   const value: AppContextValue = {
@@ -245,6 +284,7 @@ export function AppProvider({ children }: { children: ReactNode }) {
     capabilities: api.capabilities,
     checkMember,
     memberPhoto,
+    appearance: { preference, scheme, setPreference },
     files,
     apiMode: API_MODE,
     signInOtp,

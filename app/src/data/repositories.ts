@@ -1,5 +1,5 @@
 import type { OfficeDecision, SavingsAccountInfo, ServerMember } from './api/contract';
-import type { Member, OutboxItem, OutboxStatus } from '@/domain/types';
+import type { Member, OutboxItem, OutboxStatus, OfficeStatus, ProductType } from '@/domain/types';
 import type { UnsyncedTotals } from '@/domain/capture';
 import type { RegistrationItem, KycFile, KycKind, RegistrationFile } from '@/domain/registration';
 
@@ -31,6 +31,31 @@ export type NewOutboxItem = Omit<
   'status' | 'attempts' | 'lastError' | 'serverId' | 'officeStatus' | 'officeReason' | 'officeDecidedAt'
 >;
 
+/** A deposit that came from the server rather than from this phone: it is already delivered, so only its outcome is kept. */
+export interface ImportedDeposit {
+  localTransactionId: string;
+  memberCode: string;
+  memberName: string;
+  productType: ProductType;
+  amount: string;
+  collectedAt: string;
+  serverId: string;
+  officeStatus: OfficeStatus;
+  officeReason: string | null;
+  officeDecidedAt: string | null;
+}
+
+/** A registration that came from the server: the member exists, so only who and when are kept. */
+export interface ImportedRegistration {
+  serverId: string;
+  firstName: string;
+  lastName: string;
+  gender: 'F' | 'M';
+  dateOfBirth: string;
+  phone: string;
+  capturedAt: string;
+}
+
 export interface OutboxRepo {
   enqueue(item: NewOutboxItem): Promise<void>;
   list(limit: number): Promise<OutboxItem[]>;
@@ -49,6 +74,8 @@ export interface OutboxRepo {
   unsyncedTotals(): Promise<UnsyncedTotals>;
   /** Items collected within a UTC day, "YYYY-MM-DD". */
   forDay(day: string): Promise<OutboxItem[]>;
+  /** Adds deposits the server has for this officer that this phone does not know (made on another phone, or before a reinstall). Returns how many were new. */
+  importDeposits(items: ImportedDeposit[]): Promise<number>;
   /** Items collected from one UTC day to another, both included ("YYYY-MM-DD"), newest first. */
   inRange(fromDay: string, toDay: string): Promise<OutboxItem[]>;
   /** How many delivered items the office has not yet finished with (no decision, or still pending). */
@@ -90,6 +117,8 @@ export interface RegistrationRepo {
   hasIdNumber(idNumber: string): Promise<boolean>;
   /** Registrations captured within a UTC day, "YYYY-MM-DD". */
   forDay(day: string): Promise<RegistrationItem[]>;
+  /** Adds members the server says this officer registered that this phone does not know. Returns how many were new. */
+  importRegistrations(items: ImportedRegistration[]): Promise<number>;
   /** Registrations captured from one UTC day to another, both included, newest first. */
   inRange(fromDay: string, toDay: string): Promise<RegistrationItem[]>;
   /** Files not yet delivered, for registrations the core system has received (so the member's number is known). */

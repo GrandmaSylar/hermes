@@ -108,7 +108,7 @@ function DocumentTile({ slot, form, set, error }: { slot: KycSlot; form: Registr
 
   return (
     <View style={{ flexBasis: '47%', flexGrow: 1, backgroundColor: colors.card, borderRadius: 18, borderCurve: 'continuous', padding: 10, gap: 8, borderWidth: 1.5, borderColor: shown ? colors.danger : file ? colors.ok : 'transparent', boxShadow: '0 1px 2px rgba(16, 24, 40, 0.06), 0 2px 8px rgba(16, 24, 40, 0.04)' }}>
-      <View style={{ height: 88, borderRadius: 12, borderCurve: 'continuous', backgroundColor: '#EEF1F6', alignItems: 'center', justifyContent: 'center', overflow: 'hidden' }}>
+      <View style={{ height: 88, borderRadius: 12, borderCurve: 'continuous', backgroundColor: colors.fill, alignItems: 'center', justifyContent: 'center', overflow: 'hidden' }}>
         {busy ? (
           <ActivityIndicator color={colors.primary} />
         ) : file ? (
@@ -118,7 +118,7 @@ function DocumentTile({ slot, form, set, error }: { slot: KycSlot; form: Registr
             <Image source={{ uri: file.uri }} style={{ width: '100%', height: '100%' }} resizeMode="cover" />
           )
         ) : (
-          <Ionicons name="camera-outline" size={30} color="#9AA3B2" />
+          <Ionicons name="camera-outline" size={30} color={colors.faint} />
         )}
         {file && !busy ? (
           <Pressable accessibilityRole="button" accessibilityLabel={`Remove ${slot.label}`} onPress={remove} hitSlop={8} style={{ position: 'absolute', top: 6, right: 6, width: 24, height: 24, borderRadius: 12, backgroundColor: 'rgba(16,24,40,0.65)', alignItems: 'center', justifyContent: 'center' }}>
@@ -435,7 +435,7 @@ export function BeneficiariesStep({ form, set, errorFor }: StepProps) {
           <Text style={{ fontSize: 14, fontWeight: '700', color: total === 100 ? colors.ok : colors.text }}>{total}% allocated</Text>
           <Text style={{ fontSize: 13, color: colors.muted }}>{left}% left</Text>
         </View>
-        <View style={{ height: 8, borderRadius: 4, backgroundColor: '#E3E7EE', overflow: 'hidden' }}>
+        <View style={{ height: 8, borderRadius: 4, backgroundColor: colors.track, overflow: 'hidden' }}>
           <View style={{ height: 8, width: `${Math.min(100, total)}%`, backgroundColor: total === 100 ? colors.ok : colors.primary, borderRadius: 4 }} />
         </View>
         {errorFor('beneficiaries') ? <Text style={{ color: colors.danger, fontSize: 12 }}>{errorFor('beneficiaries')}</Text> : null}
