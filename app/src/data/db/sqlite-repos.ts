@@ -387,6 +387,15 @@ class SqliteOutboxRepo implements OutboxRepo {
     return rows.map(toOutbox);
   }
 
+  async inRange(fromDay: string, toDay: string): Promise<OutboxItem[]> {
+    const rows = await this.db.getAllAsync<OutboxRow>(
+      'SELECT * FROM outbox WHERE substr(collected_at, 1, 10) BETWEEN ? AND ? ORDER BY collected_at DESC, created_at DESC',
+      fromDay,
+      toDay,
+    );
+    return rows.map(toOutbox);
+  }
+
   async awaitingDecision(): Promise<number> {
     const row = await this.db.getFirstAsync<{ n: number }>(
       "SELECT COUNT(*) AS n FROM outbox WHERE status = 'SYNCED' AND (office_status IS NULL OR office_status = 'PENDING' OR office_status = 'APPROVED')",
@@ -653,6 +662,15 @@ class SqliteRegistrationRepo implements RegistrationRepo {
     const rows = await this.db.getAllAsync<RegistrationRow>(
       'SELECT * FROM registrations WHERE substr(captured_at, 1, 10) = ? ORDER BY created_at DESC',
       day,
+    );
+    return this.withFiles(rows);
+  }
+
+  async inRange(fromDay: string, toDay: string): Promise<RegistrationItem[]> {
+    const rows = await this.db.getAllAsync<RegistrationRow>(
+      'SELECT * FROM registrations WHERE substr(captured_at, 1, 10) BETWEEN ? AND ? ORDER BY captured_at DESC, created_at DESC',
+      fromDay,
+      toDay,
     );
     return this.withFiles(rows);
   }
