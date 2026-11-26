@@ -13,7 +13,7 @@ import { Button, Card, SectionLabel, StatusPill, colors } from '@/ui/theme';
 
 function describeReport(offline: boolean, authError: boolean, pushed: number, registrations: number, pulled: number): string {
   if (authError) return 'Your session has ended. Sign in again.';
-  if (offline) return 'No connection. Items stay safe on this phone and sync automatically.';
+  if (offline) return 'Offline. Items are safe and will sync later.';
   const regs = registrations > 0 ? `, ${registrations} registration${registrations === 1 ? '' : 's'}` : '';
   return `${pushed} collection${pushed === 1 ? '' : 's'} sent${regs}, ${pulled} members refreshed.`;
 }
@@ -22,11 +22,11 @@ function OfficeStatusLine({ item }: { item: OutboxItem }) {
   const line = officeLine(item);
   if (!line) return null;
   const color = line.tone === 'good' ? colors.ok : line.tone === 'bad' ? colors.danger : colors.muted;
-  return <Text style={{ color, marginTop: 8, fontSize: 13, fontWeight: line.tone === 'wait' ? '400' : '600' }}>{line.text}</Text>;
+  return <Text style={{ color, marginTop: 8, fontSize: 12, fontWeight: line.tone === 'wait' ? '400' : '600' }}>{line.text}</Text>;
 }
 
 function Note({ children, tone = 'muted' }: { children: React.ReactNode; tone?: 'muted' | 'bad' }) {
-  return <Text style={{ color: tone === 'bad' ? colors.danger : colors.muted, fontSize: 13, marginTop: 6 }}>{children}</Text>;
+  return <Text style={{ color: tone === 'bad' ? colors.danger : colors.muted, fontSize: 12, marginTop: 6 }}>{children}</Text>;
 }
 
 export default function SyncTab() {
@@ -66,7 +66,7 @@ export default function SyncTab() {
       style={{ backgroundColor: colors.bg }}
       ListHeaderComponent={
         <View style={{ gap: 16, marginBottom: 4 }}>
-          <Text style={{ fontSize: 34, fontWeight: '800', color: colors.text, letterSpacing: -0.6 }}>Sync</Text>
+          <Text style={{ fontSize: 26, fontWeight: '700', color: colors.text, letterSpacing: -0.6 }}>Sync</Text>
 
           <Reveal>
             <Card style={{ gap: 16 }}>
@@ -75,16 +75,16 @@ export default function SyncTab() {
                   <Ionicons name={syncing ? 'sync' : clear ? 'checkmark-done' : 'cloud-upload-outline'} size={26} color={clear ? colors.ok : colors.warn} />
                 </View>
                 <View style={{ flex: 1 }}>
-                  <Text style={{ fontSize: 22, fontWeight: '800', color: colors.text, letterSpacing: -0.3 }}>
+                  <Text style={{ fontSize: 18, fontWeight: '700', color: colors.text, letterSpacing: -0.3 }}>
                     {syncing ? 'Syncing…' : clear ? 'All sent' : `${waiting} waiting to sync`}
                   </Text>
-                  <Text style={{ color: colors.muted, fontSize: 13, marginTop: 2 }}>
+                  <Text style={{ color: colors.muted, fontSize: 12, marginTop: 2 }}>
                     {ago(lastSyncAt ?? pulledAt, new Date())}
                     {lastSyncAt ? ` · ${new Date(lastSyncAt).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}` : ''}
                   </Text>
                 </View>
               </View>
-              <Text style={{ color: lastReport?.offline ? colors.warn : colors.muted, fontSize: 14 }}>{report}</Text>
+              <Text style={{ color: lastReport?.offline ? colors.warn : colors.muted, fontSize: 13 }}>{report}</Text>
               <Button title="Sync now" onPress={() => void syncNow()} busy={syncing} />
             </Card>
           </Reveal>
@@ -108,13 +108,13 @@ export default function SyncTab() {
                 <Reveal key={r.localRegistrationId} index={i}>
                   <Card>
                     <View style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', gap: 12 }}>
-                      <Text numberOfLines={1} style={{ flex: 1, fontSize: 17, fontWeight: '700', color: colors.text }}>{fullName(r)}</Text>
+                      <Text numberOfLines={1} style={{ flex: 1, fontSize: 15, fontWeight: '700', color: colors.text }}>{fullName(r)}</Text>
                       <StatusPill status={r.status} />
                     </View>
-                    <Text style={{ color: colors.muted, marginTop: 4, fontSize: 13 }}>
+                    <Text style={{ color: colors.muted, marginTop: 4, fontSize: 12 }}>
                       {r.phone} · {new Date(r.capturedAt).toLocaleString([], { day: 'numeric', month: 'short', hour: '2-digit', minute: '2-digit' })}
                     </Text>
-                    {r.serverId ? <Note>Member number {r.serverId} (pending approval)</Note> : null}
+                    {r.serverId ? <Note>Member {r.serverId}, pending approval</Note> : null}
                     {documentSummary(r.files) ? <Note>{documentSummary(r.files)}</Note> : null}
                     {r.files.filter((f) => f.status === 'REJECTED' && f.lastError).map((f) => (
                       <Note key={f.kind} tone="bad">{f.lastError}</Note>
@@ -141,13 +141,13 @@ export default function SyncTab() {
         <Reveal index={index}>
           <Card>
             <View style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', gap: 12 }}>
-              <Text numberOfLines={1} style={{ flex: 1, fontSize: 17, fontWeight: '700', color: colors.text }}>{item.memberName}</Text>
-              <Text style={{ fontSize: 17, fontWeight: '800', color: colors.text, fontVariant: ['tabular-nums'] }}>{ghs(item.amount)}</Text>
+              <Text numberOfLines={1} style={{ flex: 1, fontSize: 15, fontWeight: '700', color: colors.text }}>{item.memberName}</Text>
+              <Text style={{ fontSize: 15, fontWeight: '700', color: colors.text, fontVariant: ['tabular-nums'] }}>{ghs(item.amount)}</Text>
             </View>
-            <Text style={{ color: colors.muted, marginTop: 4, fontSize: 13 }}>
+            <Text style={{ color: colors.muted, marginTop: 4, fontSize: 12 }}>
               {PRODUCT_LABELS[item.productType]} · {new Date(item.collectedAt).toLocaleString([], { day: 'numeric', month: 'short', hour: '2-digit', minute: '2-digit' })}
             </Text>
-            {item.accountLabel ? <Text style={{ color: colors.muted, fontSize: 13, marginTop: 2 }}>{item.accountLabel}</Text> : null}
+            {item.accountLabel ? <Text style={{ color: colors.muted, fontSize: 12, marginTop: 2 }}>{item.accountLabel}</Text> : null}
             <View style={{ height: 10 }} />
             <StatusPill status={item.status} />
             {item.serverId ? <Note>Reference {item.serverId}</Note> : null}
@@ -160,8 +160,8 @@ export default function SyncTab() {
         items === null ? undefined : (
           <Card style={{ alignItems: 'center', gap: 8, paddingVertical: 32 }}>
             <Ionicons name="receipt-outline" size={32} color={colors.muted} />
-            <Text style={{ fontSize: 16, fontWeight: '600', color: colors.text }}>No collections yet</Text>
-            <Text style={{ color: colors.muted, textAlign: 'center' }}>Deposits you take will be listed here with their progress.</Text>
+            <Text style={{ fontSize: 15, fontWeight: '600', color: colors.text }}>No collections yet</Text>
+            <Text style={{ color: colors.muted, textAlign: 'center' }}>Deposits you take appear here.</Text>
           </Card>
         )
       }

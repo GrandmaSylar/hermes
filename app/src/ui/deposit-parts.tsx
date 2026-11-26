@@ -62,9 +62,9 @@ export function AccountChooser(props: {
       <SectionLabel>{props.title}</SectionLabel>
       {props.accounts.map((a) => (
         <ChoiceRow key={a.id} selected={a.id === props.selectedId} onPress={() => props.onSelect(a.id)} label={`${accountLabel(a)}, balance ${a.balance}`}>
-          <Text style={{ color: colors.text, fontSize: 16, fontWeight: '700' }}>{a.productName}</Text>
-          <Text style={{ color: colors.muted, fontSize: 14 }}>Account {a.number}</Text>
-          <Text style={{ color: colors.text, fontSize: 15, marginTop: 2 }}>Balance GHS {formatAmount(a.balance)}</Text>
+          <Text style={{ color: colors.text, fontSize: 15, fontWeight: '700' }}>{a.productName}</Text>
+          <Text style={{ color: colors.muted, fontSize: 13 }}>Account {a.number}</Text>
+          <Text style={{ color: colors.text, fontSize: 14, marginTop: 2 }}>Balance GHS {formatAmount(a.balance)}</Text>
         </ChoiceRow>
       ))}
     </View>
@@ -78,7 +78,7 @@ export function PaymentModeChooser(props: { modes: PaymentMode[]; selected: Paym
       <SectionLabel>Mode of payment</SectionLabel>
       {props.modes.map((m) => (
         <ChoiceRow key={m} selected={m === props.selected} onPress={() => props.onSelect(m)} label={PAYMENT_LABELS[m]}>
-          <Text style={{ color: colors.text, fontSize: 16, fontWeight: '600' }}>{PAYMENT_LABELS[m]}</Text>
+          <Text style={{ color: colors.text, fontSize: 15, fontWeight: '600' }}>{PAYMENT_LABELS[m]}</Text>
         </ChoiceRow>
       ))}
     </View>
@@ -140,16 +140,16 @@ export function ConfirmDepositModal(props: {
 
             <View style={{ backgroundColor: colors.card, borderRadius: 30, paddingTop: 48, overflow: 'hidden', ...RADIUS }}>
               <ScrollView contentContainerStyle={{ paddingHorizontal: 22 }} showsVerticalScrollIndicator={false}>
-                <Text style={{ textAlign: 'center', fontSize: 13, fontWeight: '800', letterSpacing: 1, color: colors.ok }}>PLEASE CONFIRM</Text>
-                <Text style={{ textAlign: 'center', fontSize: 18, fontWeight: '700', color: colors.text, marginTop: 4 }}>{summary.title.replace(/^Confirm /, '').replace(/^./, (c) => c.toUpperCase())}</Text>
+                <Text style={{ textAlign: 'center', fontSize: 12, fontWeight: '700', letterSpacing: 1, color: colors.ok }}>PLEASE CONFIRM</Text>
+                <Text style={{ textAlign: 'center', fontSize: 16, fontWeight: '700', color: colors.text, marginTop: 4 }}>{summary.title.replace(/^Confirm /, '').replace(/^./, (c) => c.toUpperCase())}</Text>
 
                 {amount ? (
-                  <Text selectable adjustsFontSizeToFit numberOfLines={1} style={{ textAlign: 'center', fontSize: 42, fontWeight: '800', color: colors.text, letterSpacing: -1, marginTop: 10, fontVariant: ['tabular-nums'] }}>
+                  <Text selectable adjustsFontSizeToFit numberOfLines={1} style={{ textAlign: 'center', fontSize: 30, fontWeight: '700', color: colors.text, letterSpacing: -1, marginTop: 10, fontVariant: ['tabular-nums'] }}>
                     {amount.value}
                   </Text>
                 ) : null}
                 {member ? (
-                  <Text selectable style={{ textAlign: 'center', color: colors.muted, fontSize: 15, marginTop: 2 }}>
+                  <Text selectable style={{ textAlign: 'center', color: colors.muted, fontSize: 14, marginTop: 2 }}>
                     from {member.value}
                     {code ? ` · ${code.value}` : ''}
                   </Text>
@@ -165,15 +165,15 @@ export function ConfirmDepositModal(props: {
                 <View style={{ gap: 12 }}>
                   {others.map((line) => (
                     <View key={line.label} style={{ flexDirection: 'row', justifyContent: 'space-between', gap: 16 }}>
-                      <Text style={{ color: colors.muted, fontSize: 14, flex: 1 }}>{line.label}</Text>
-                      <Text selectable style={{ color: colors.text, fontSize: 15, fontWeight: '700', flex: 1.2, textAlign: 'right' }}>{line.value}</Text>
+                      <Text style={{ color: colors.muted, fontSize: 13, flex: 1 }}>{line.label}</Text>
+                      <Text selectable style={{ color: colors.text, fontSize: 14, fontWeight: '700', flex: 1.2, textAlign: 'right' }}>{line.value}</Text>
                     </View>
                   ))}
                 </View>
 
                 <View style={{ flexDirection: 'row', gap: 10, alignItems: 'flex-start', marginTop: 18, padding: 12, borderRadius: 14, backgroundColor: colors.warnBg, ...RADIUS }}>
                   <Ionicons name="information-circle" size={18} color={colors.warn} style={{ marginTop: 1 }} />
-                  <Text style={{ flex: 1, color: colors.warn, fontSize: 13 }}>{summary.note}</Text>
+                  <Text style={{ flex: 1, color: colors.warn, fontSize: 12 }}>{summary.note}</Text>
                 </View>
               </ScrollView>
 
@@ -191,12 +191,12 @@ export function ConfirmDepositModal(props: {
                   ) : (
                     <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8 }}>
                       <Ionicons name="lock-closed" size={18} color="#FFFFFF" />
-                      <Text style={{ color: '#FFFFFF', fontSize: 17, fontWeight: '800' }}>Confirm and save</Text>
+                      <Text style={{ color: '#FFFFFF', fontSize: 15, fontWeight: '700' }}>Confirm and save</Text>
                     </View>
                   )}
                 </PressScale>
                 <Pressable accessibilityRole="button" disabled={props.saving} onPress={props.onBack} style={{ minHeight: 48, alignItems: 'center', justifyContent: 'center', opacity: props.saving ? 0.4 : 1 }}>
-                  <Text style={{ color: colors.muted, fontSize: 16, fontWeight: '600' }}>Go back and edit</Text>
+                  <Text style={{ color: colors.muted, fontSize: 15, fontWeight: '600' }}>Go back and edit</Text>
                 </Pressable>
               </View>
             </View>

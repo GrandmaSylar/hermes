@@ -42,7 +42,7 @@ function Chip({ label, on, onPress, count }: { label: string; on: boolean; onPre
       onPress={onPress}
       style={{ minHeight: 36, paddingHorizontal: 14, borderRadius: 18, justifyContent: 'center', backgroundColor: on ? colors.primary : colors.card, borderWidth: on ? 0 : 1, borderColor: colors.border, ...RADIUS }}
     >
-      <Text style={{ fontSize: 14, fontWeight: '600', color: on ? colors.primaryText : colors.text }}>
+      <Text style={{ fontSize: 13, fontWeight: '600', color: on ? colors.primaryText : colors.text }}>
         {label}
         {count !== undefined ? ` · ${count}` : ''}
       </Text>
@@ -74,7 +74,7 @@ function DateButton({ label, day, disabled, onPick }: { label: string; day: stri
         <Text style={{ fontSize: 12, color: colors.muted, fontWeight: '500' }}>{label}</Text>
         <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6 }}>
           <Ionicons name="calendar-outline" size={16} color={colors.primary} />
-          <Text style={{ fontSize: 15, fontWeight: '600', color: colors.text }}>{shown}</Text>
+          <Text style={{ fontSize: 14, fontWeight: '600', color: colors.text }}>{shown}</Text>
         </View>
       </Pressable>
       {Platform.OS === 'ios' && iosOpen ? <DateTimePicker value={disabled ? new Date() : toDate(day)} mode="date" display="spinner" maximumDate={new Date()} onChange={chosen} /> : null}
@@ -98,7 +98,7 @@ function Pager({ page, pages, total, onPage }: { page: number; pages: number; to
     <View style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' }}>
       {button('Previous page', 'chevron-back', page - 1, page <= 1)}
       <View style={{ alignItems: 'center' }}>
-        <Text style={{ fontSize: 15, fontWeight: '600', color: colors.text, ...nums }}>Page {page} of {pages}</Text>
+        <Text style={{ fontSize: 14, fontWeight: '600', color: colors.text, ...nums }}>Page {page} of {pages}</Text>
         <Text style={{ fontSize: 12, color: colors.muted, ...nums }}>{total} in total</Text>
       </View>
       {button('Next page', 'chevron-forward', page + 1, page >= pages)}
@@ -179,7 +179,7 @@ export default function HistoryScreen() {
             onPress={() => change(() => { setTab(t); setFilter('ALL'); })}
             style={{ flex: 1, minHeight: 38, alignItems: 'center', justifyContent: 'center', borderRadius: 10, backgroundColor: tab === t ? colors.card : 'transparent', ...(tab === t ? shadow : {}) }}
           >
-            <Text style={{ fontSize: 15, fontWeight: '600', color: tab === t ? colors.text : colors.muted }}>{t === 'deposits' ? 'Deposits' : 'Registered members'}</Text>
+            <Text style={{ fontSize: 14, fontWeight: '600', color: tab === t ? colors.text : colors.muted }}>{t === 'deposits' ? 'Deposits' : 'Registered members'}</Text>
           </Pressable>
         ))}
       </View>
@@ -206,12 +206,11 @@ export default function HistoryScreen() {
 
       {/* Summary */}
       <View style={{ paddingHorizontal: 4, gap: 2 }}>
-        <Text style={{ fontSize: 13, color: colors.muted }}>{rangeLabel(range)}</Text>
-        <Text style={{ fontSize: 17, fontWeight: '700', color: colors.text, ...nums }}>
+        <Text style={{ fontSize: 12, color: colors.muted }}>{rangeLabel(range)}</Text>
+        <Text style={{ fontSize: 15, fontWeight: '700', color: colors.text, ...nums }}>
           {filtered.length} {tab === 'deposits' ? (filtered.length === 1 ? 'deposit' : 'deposits') : filtered.length === 1 ? 'member registered' : 'members registered'}
           {cash !== null ? ` · ${ghs(cash)}` : ''}
         </Text>
-        {cash !== null ? <Text style={{ fontSize: 12, color: colors.muted }}>Refused deposits are not counted in the cash.</Text> : null}
       </View>
 
       {/* List */}
@@ -221,9 +220,9 @@ export default function HistoryScreen() {
         ) : shown.rows.length === 0 ? (
           <View style={{ padding: 32, alignItems: 'center', gap: 8 }}>
             <Ionicons name={tab === 'deposits' ? 'cash-outline' : 'person-add-outline'} size={32} color={colors.muted} />
-            <Text style={{ fontSize: 16, fontWeight: '600', color: colors.text }}>Nothing here</Text>
-            <Text style={{ fontSize: 14, color: colors.muted, textAlign: 'center' }}>
-              No {tab === 'deposits' ? 'deposits' : 'registrations'} {filter === 'ALL' ? '' : `${filter.toLowerCase()} `}for these dates. Try a wider range.
+            <Text style={{ fontSize: 15, fontWeight: '600', color: colors.text }}>Nothing here</Text>
+            <Text style={{ fontSize: 13, color: colors.muted, textAlign: 'center' }}>
+              No {tab === 'deposits' ? 'deposits' : 'registrations'} {filter === 'ALL' ? '' : `${filter.toLowerCase()} `}in this range.
             </Text>
           </View>
         ) : tab === 'deposits' ? (

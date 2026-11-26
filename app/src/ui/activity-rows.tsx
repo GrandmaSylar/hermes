@@ -62,13 +62,13 @@ function RowShell(props: { icon: IconName; refused: boolean; title: string; sub:
           <Ionicons name={props.icon} size={20} color={props.refused ? colors.danger : colors.primary} />
         </View>
         <View style={{ flex: 1, gap: 2 }}>
-          <Text numberOfLines={1} style={{ fontSize: 16, fontWeight: '600', color: colors.text }}>{props.title}</Text>
-          <Text numberOfLines={1} style={{ fontSize: 13, color: colors.muted }}>{props.sub}</Text>
+          <Text numberOfLines={1} style={{ fontSize: 15, fontWeight: '600', color: colors.text }}>{props.title}</Text>
+          <Text numberOfLines={1} style={{ fontSize: 12, color: colors.muted }}>{props.sub}</Text>
           {props.note ? <Text numberOfLines={2} style={{ fontSize: 12, color: props.refused ? colors.danger : colors.muted }}>{props.note}</Text> : null}
         </View>
         <View style={{ alignItems: 'flex-end', gap: 4 }}>
           {props.right ? (
-            <Text style={{ fontSize: 16, fontWeight: '700', color: props.refused ? colors.muted : colors.text, textDecorationLine: props.refused ? 'line-through' : 'none', ...nums }}>{props.right}</Text>
+            <Text style={{ fontSize: 15, fontWeight: '700', color: props.refused ? colors.muted : colors.text, textDecorationLine: props.refused ? 'line-through' : 'none', ...nums }}>{props.right}</Text>
           ) : null}
           <StatusBadge status={props.status} />
         </View>

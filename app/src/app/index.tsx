@@ -14,7 +14,7 @@ export default function Index() {
       <View style={{ flex: 1, alignItems: 'center', justifyContent: 'center', gap: 20, backgroundColor: colors.bg }}>
         <BrandLoader />
         <Reveal>
-          <Text style={{ color: colors.muted, fontSize: 15, fontWeight: '500' }}>Opening QSS Mobile Banking</Text>
+          <Text style={{ color: colors.muted, fontSize: 14, fontWeight: '500' }}>Opening QSS Mobile Banking</Text>
         </Reveal>
       </View>
     );
@@ -23,7 +23,7 @@ export default function Index() {
     return (
       <View style={{ flex: 1, padding: 24, justifyContent: 'center', alignItems: 'center', gap: 12, backgroundColor: colors.bg }}>
         <Ionicons name="alert-circle" size={44} color={colors.danger} />
-        <Text style={{ fontSize: 20, fontWeight: '700', color: colors.text }}>App cannot start</Text>
+        <Text style={{ fontSize: 17, fontWeight: '700', color: colors.text }}>App cannot start</Text>
         <Text selectable style={{ color: colors.muted, textAlign: 'center' }}>{error}</Text>
       </View>
     );

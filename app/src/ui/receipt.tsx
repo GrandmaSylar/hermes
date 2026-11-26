@@ -58,16 +58,16 @@ export function Receipt(props: { brand: Brand; title: string; amount: string; at
         {brand.logo ? (
           <Image source={{ uri: brand.logo }} contentFit="contain" accessibilityLabel={`${brand.creditUnion || 'Credit union'} logo`} style={{ width: 72, height: 72, borderRadius: 16 }} />
         ) : null}
-        {brand.creditUnion ? <Text selectable style={{ fontSize: 17, fontWeight: '800', color: colors.text, textAlign: 'center', letterSpacing: -0.2 }}>{brand.creditUnion}</Text> : null}
-        {brand.branch ? <Text selectable style={{ fontSize: 13, color: colors.muted, textAlign: 'center' }}>{brand.branch}</Text> : null}
+        {brand.creditUnion ? <Text selectable style={{ fontSize: 15, fontWeight: '700', color: colors.text, textAlign: 'center', letterSpacing: -0.2 }}>{brand.creditUnion}</Text> : null}
+        {brand.branch ? <Text selectable style={{ fontSize: 12, color: colors.muted, textAlign: 'center' }}>{brand.branch}</Text> : null}
         <View style={{ marginTop: 8, paddingHorizontal: 12, paddingVertical: 4, borderRadius: 999, backgroundColor: colors.primarySoft }}>
-          <Text style={{ fontSize: 11, fontWeight: '800', letterSpacing: 1, color: colors.primaryDeep }}>{props.title.toUpperCase()}</Text>
+          <Text style={{ fontSize: 11, fontWeight: '700', letterSpacing: 1, color: colors.primaryDeep }}>{props.title.toUpperCase()}</Text>
         </View>
       </View>
 
       <View style={{ alignItems: 'center', paddingVertical: 12 }}>
-        <Text selectable style={{ fontSize: 38, fontWeight: '800', color: colors.text, letterSpacing: -1, fontVariant: ['tabular-nums'] }}>{props.amount}</Text>
-        <Text style={{ color: colors.muted, fontSize: 13, marginTop: 2 }}>
+        <Text selectable style={{ fontSize: 30, fontWeight: '700', color: colors.text, letterSpacing: -1, fontVariant: ['tabular-nums'] }}>{props.amount}</Text>
+        <Text style={{ color: colors.muted, fontSize: 12, marginTop: 2 }}>
           {props.at.toLocaleDateString('en-GB', { day: 'numeric', month: 'short', year: 'numeric' })} · {props.at.toLocaleTimeString('en-GB', { hour: '2-digit', minute: '2-digit' })}
         </Text>
       </View>
@@ -82,14 +82,14 @@ export function Receipt(props: { brand: Brand; title: string; amount: string; at
       <View style={{ paddingHorizontal: 22, paddingTop: 8, paddingBottom: 22, gap: 12 }}>
         {props.lines.map((l) => (
           <View key={l.label} style={{ flexDirection: 'row', justifyContent: 'space-between', gap: 16 }}>
-            <Text style={{ color: colors.muted, fontSize: 14, flex: 1 }}>{l.label}</Text>
-            <Text selectable style={{ color: colors.text, fontSize: 15, fontWeight: '600', flex: 1.3, textAlign: 'right' }}>{l.value}</Text>
+            <Text style={{ color: colors.muted, fontSize: 13, flex: 1 }}>{l.label}</Text>
+            <Text selectable style={{ color: colors.text, fontSize: 14, fontWeight: '600', flex: 1.3, textAlign: 'right' }}>{l.value}</Text>
           </View>
         ))}
         {props.officer ? (
           <View style={{ flexDirection: 'row', justifyContent: 'space-between', gap: 16 }}>
-            <Text style={{ color: colors.muted, fontSize: 14, flex: 1 }}>Received by</Text>
-            <Text selectable style={{ color: colors.text, fontSize: 15, fontWeight: '600', flex: 1.3, textAlign: 'right' }}>{props.officer}</Text>
+            <Text style={{ color: colors.muted, fontSize: 13, flex: 1 }}>Received by</Text>
+            <Text selectable style={{ color: colors.text, fontSize: 14, fontWeight: '600', flex: 1.3, textAlign: 'right' }}>{props.officer}</Text>
           </View>
         ) : null}
         <Text style={{ color: colors.muted, fontSize: 12, marginTop: 6, textAlign: 'center' }}>{props.footer}</Text>
