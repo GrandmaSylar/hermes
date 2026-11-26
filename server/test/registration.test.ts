@@ -263,4 +263,12 @@ describe('member types, duplicate check and capability', () => {
     const off = await app.inject({ method: 'GET', url: '/v1/me', headers: { authorization: auth } });
     expect(off.json().capabilities).toEqual({ registration: false, documents: false });
   });
+
+  test('/me names the branch and credit union, or null when they cannot be read', async () => {
+    const res = await app.inject({ method: 'GET', url: '/v1/me', headers: { authorization: auth } });
+    expect(res.json().branch).toEqual({ code: '001', name: 'Techiman Branch', city: 'Techiman', creditUnion: 'Test Credit Union' });
+    repo.branch = null;
+    const none = await app.inject({ method: 'GET', url: '/v1/me', headers: { authorization: auth } });
+    expect(none.json().branch).toBeNull();
+  });
 });

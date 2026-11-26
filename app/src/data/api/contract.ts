@@ -137,6 +137,14 @@ export interface DocumentResult {
   reason?: string;
 }
 
+/** Where the banker works, as named in the core database. */
+export interface OfficeProfile {
+  creditUnion: string;
+  branchName: string;
+  branchCode: string;
+  city: string;
+}
+
 export interface ApiCapabilities {
   /** The server can say what the office decided about each collection. */
   officeDecisions: boolean;
@@ -158,6 +166,8 @@ export type SignInResult =
 
 export interface ApiClient {
   readonly capabilities: ApiCapabilities;
+  /** The credit union and branch, filled in by refreshCapabilities when the server can name them. */
+  office?: OfficeProfile | null;
   /** Forgets anything held in memory for the signed-in user. Called on sign-out. */
   reset?(): void;
   /**

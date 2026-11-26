@@ -1,0 +1,171 @@
+import { router, useLocalSearchParams } from 'expo-router';
+import { useEffect, useRef, useState } from 'react';
+import { ActivityIndicator, FlatList, Pressable, RefreshControl, Text, TextInput, View } from 'react-native';
+import type { Member } from '@/domain/types';
+import { useApp } from '@/state/AppProvider';
+import { colors } from '@/ui/theme';
+
+const RESULT_LIMIT = 50;
+
+function MemberRow({ member }: { member: Member }) {
+  return (
+    <Pressable
+      onPress={() => router.push(`/member/${member.memberCode}`)}
+      style={({ pressed }) => ({
+        paddingVertical: 12,
+        paddingHorizontal: 16,
+        backgroundColor: pressed ? '#EEF2F6' : colors.card,
+        borderBottomWidth: 1,
+        borderBottomColor: colors.border,
+      })}
+    >
+      <View style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' }}>
+        <Text style={{ fontSize: 16, color: colors.text, fontWeight: '600', flexShrink: 1 }}>
+          {member.myCustomer ? '★ ' : ''}
+          {member.name}
+        </Text>
+        {member.status !== 'ACTIVE' ? (
+          <Text style={{ fontSize: 12, color: colors.warn }}>{member.status === 'INACTIVE' ? 'Inactive' : 'Pending approval'}</Text>
+        ) : null}
+      </View>
+      <Text style={{ color: colors.muted, marginTop: 2 }}>
+        {member.memberCode} · {member.phone}
+      </Text>
+    </Pressable>
+  );
+}
+
+export default function MembersTab() {
+  const { repos, version, syncing, syncNow } = useApp();
+  const { mode } = useLocalSearchParams<{ mode?: string }>();
+  const [note, setNote] = useState('');
+  const [query, setQuery] = useState('');
+  const [debounced, setDebounced] = useState('');
+  const [results, setResults] = useState<Member[]>([]);
+  const [total, setTotal] = useState(0);
+  const requestId = useRef(0);
+
+  // Wait briefly after typing stops, so each keystroke does not query the database.
+  useEffect(() => {
+    const t = setTimeout(() => setDebounced(query), 150);
+    return () => clearTimeout(t);
+  }, [query]);
+
+  useEffect(() => {
+    if (!repos) return;
+    const id = ++requestId.current;
+    (async () => {
+      const q = debounced.trim();
+      let rows: Member[];
+      if (q === '') {
+        const mine = await repos.members.mine(RESULT_LIMIT);
+        const frequent = await repos.members.frequent(10);
+        rows = [...mine, ...frequent];
+      } else {
+        rows = await repos.members.search(q, RESULT_LIMIT);
+      }
+      const count = await repos.members.count();
+      // Ignore answers that arrive after a newer search was started.
+      if (id !== requestId.current) return;
+      setResults(rows);
+      setTotal(count);
+    })();
+  }, [repos, debounced, version]);
+
+  // Pull down or tap the round button: sends waiting items, then re-downloads every member and balance.
+  const refresh = async () => {
+    if (syncing) return;
+    setNote('');
+    const report = await syncNow({ full: true });
+    if (report?.offline) setNote('No connection. Showing what is on this phone.');
+  };
+
+  return (
+    <View style={{ flex: 1 }}>
+      <FlatList
+        refreshControl={<RefreshControl refreshing={syncing} onRefresh={refresh} />}
+        data={results}
+        keyExtractor={(m) => m.memberCode}
+        renderItem={({ item }) => <MemberRow member={item} />}
+        keyboardShouldPersistTaps="handled"
+        initialNumToRender={12}
+        windowSize={7}
+        ListHeaderComponent={
+          <View style={{ padding: 16, gap: 12 }}>
+            {mode === 'deposit' ? (
+              <View style={{ backgroundColor: colors.primarySoft, borderRadius: 12, padding: 12 }}>
+                <Text style={{ color: colors.primaryDeep, fontWeight: '600' }}>Choose the member who is paying in</Text>
+                <Text style={{ color: colors.primaryDeep, fontSize: 13, marginTop: 2 }}>Search below, then tap their name to start the deposit.</Text>
+              </View>
+            ) : null}
+            <TextInput
+              value={query}
+              onChangeText={setQuery}
+              placeholder="Name, member no., phone or account no."
+              placeholderTextColor={colors.muted}
+              autoFocus={mode === 'deposit'}
+              autoCorrect={false}
+              autoCapitalize="none"
+              returnKeyType="search"
+              clearButtonMode="while-editing"
+              style={{
+                minHeight: 48,
+                borderWidth: 1,
+                borderColor: colors.border,
+                borderRadius: 10,
+                paddingHorizontal: 12,
+                fontSize: 16,
+                backgroundColor: colors.card,
+                color: colors.text,
+              }}
+            />
+            {note ? <Text style={{ color: colors.warn, fontSize: 13 }}>{note}</Text> : null}
+            <Text style={{ color: colors.muted, fontSize: 12 }}>
+              {debounced.trim() === ''
+                ? `My customers and frequent members · ${total.toLocaleString()} members on this phone`
+                : `${results.length}${results.length === RESULT_LIMIT ? '+' : ''} found`}
+            </Text>
+          </View>
+        }
+        ListEmptyComponent={
+          <Text style={{ color: colors.muted, textAlign: 'center', padding: 32 }}>
+            {total === 0
+              ? 'No members yet. Connect to the network and sync.'
+              : debounced.trim() === ''
+                ? 'Search for a member, then tap ★ on their page to add them to My customers.'
+                : 'No member matches.'}
+          </Text>
+        }
+      />
+      <Pressable
+        accessibilityRole="button"
+        accessibilityLabel="Refresh"
+        onPress={refresh}
+        disabled={syncing}
+        style={({ pressed }) => ({
+          position: 'absolute',
+          right: 20,
+          bottom: 24,
+          width: 56,
+          height: 56,
+          borderRadius: 28,
+          alignItems: 'center',
+          justifyContent: 'center',
+          backgroundColor: colors.primary,
+          opacity: pressed || syncing ? 0.85 : 1,
+          elevation: 6,
+          shadowColor: '#000',
+          shadowOpacity: 0.25,
+          shadowRadius: 6,
+          shadowOffset: { width: 0, height: 3 },
+        })}
+      >
+        {syncing ? (
+          <ActivityIndicator color={colors.primaryText} />
+        ) : (
+          <Text style={{ color: colors.primaryText, fontSize: 26, lineHeight: 30 }}>↻</Text>
+        )}
+      </Pressable>
+    </View>
+  );
+}

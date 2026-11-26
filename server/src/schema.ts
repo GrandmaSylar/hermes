@@ -34,6 +34,7 @@ export const TABLES = [
   'ShareTransaction',
   'SMSHistory',
   'AppSettings',
+  'Branch',
   'CustomerContact',
   'CustomerAlertPreferences',
   'MobileTransactionRejection',

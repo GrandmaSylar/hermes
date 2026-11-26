@@ -1,6 +1,15 @@
+import { Ionicons } from '@expo/vector-icons';
 import { Tabs } from 'expo-router';
+import type { ColorValue } from 'react-native';
 import { useApp } from '@/state/AppProvider';
 import { colors } from '@/ui/theme';
+
+type IconName = React.ComponentProps<typeof Ionicons>['name'];
+
+const icon = (focused: IconName, idle: IconName) =>
+  function TabIcon({ color, size, focused: on }: { color: ColorValue; size: number; focused: boolean }) {
+    return <Ionicons name={on ? focused : idle} size={size + 2} color={color as string} />;
+  };
 
 export default function TabsLayout() {
   const { status } = useApp();
@@ -12,16 +21,17 @@ export default function TabsLayout() {
       screenOptions={{
         tabBarActiveTintColor: colors.primary,
         tabBarInactiveTintColor: colors.muted,
-        headerStyle: { backgroundColor: colors.card },
-        headerTintColor: colors.text,
-        tabBarLabelStyle: { fontSize: 13, fontWeight: '600' },
-        // Labels only: no icon library, to keep the app light on entry-level phones.
-        tabBarIcon: () => null,
-        tabBarIconStyle: { display: 'none' },
+        headerStyle: { backgroundColor: colors.bg },
+        headerShadowVisible: false,
+        headerTitleStyle: { fontWeight: '700', color: colors.text },
+        sceneStyle: { backgroundColor: colors.bg },
+        tabBarStyle: { backgroundColor: colors.card, borderTopColor: colors.border },
+        tabBarLabelStyle: { fontSize: 11, fontWeight: '600' },
       }}
     >
-      <Tabs.Screen name="index" options={{ title: 'Members', tabBarLabel: 'Members' }} />
-      <Tabs.Screen name="sync" options={{ title: 'Sync', tabBarLabel: 'Sync' }} />
+      <Tabs.Screen name="index" options={{ title: 'Home', headerShown: false, tabBarIcon: icon('home', 'home-outline') }} />
+      <Tabs.Screen name="members" options={{ title: 'Members', tabBarIcon: icon('people', 'people-outline') }} />
+      <Tabs.Screen name="sync" options={{ title: 'Sync', tabBarIcon: icon('sync-circle', 'sync-circle-outline') }} />
     </Tabs>
   );
 }
