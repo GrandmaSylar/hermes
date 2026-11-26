@@ -202,7 +202,7 @@ export class HttpApi implements ApiClient {
   // ---- sign-in --------------------------------------------------------
 
   /**
-   * Staff ID and PIN. The server checks the PIN against the core system and
+   * Username and password. The server checks the password against the core system and
    * answers with the banker's details and limits, so there is no second step.
    */
   async login(staffId: string, pin: string, deviceId: string): Promise<SignInResult> {
@@ -211,10 +211,10 @@ export class HttpApi implements ApiClient {
       body = asRecord(await this.send(null, 'POST', `${V1}/auth/login`, { username: staffId.trim(), pin, deviceId }));
     } catch (error) {
       if (error instanceof HttpStatusError && (error.status === 400 || error.status === 401 || error.status === 403)) {
-        throw new ApiError('AUTH', error.status === 400 ? 'Enter your staff ID and PIN.' : error.message);
+        throw new ApiError('AUTH', error.status === 400 ? 'Enter your username and password.' : error.message);
       }
       if (error instanceof ApiError && error.kind === 'AUTH') {
-        throw new ApiError('AUTH', 'Staff ID or PIN is incorrect.');
+        throw new ApiError('AUTH', 'Username or password is incorrect.');
       }
       throw error;
     }

@@ -146,13 +146,15 @@ export default function Login() {
                 ) : step === 'password' ? (
                   <View>
                     <Text style={{ fontSize: 20, fontWeight: '700', color: colors.text, letterSpacing: -0.3 }}>Sign in</Text>
-                    <Text style={{ color: colors.muted, fontSize: 13, marginTop: 2, marginBottom: 18 }}>Staff ID and PIN</Text>
+                    <Text style={{ color: colors.muted, fontSize: 13, marginTop: 2, marginBottom: 18 }}>Username and password</Text>
                     <Field
-                      label="Staff ID"
+                      label="Username"
                       value={staffId}
                       onChangeText={setStaffId}
                       autoCapitalize={apiMode === 'http' ? 'none' : 'characters'}
                       autoCorrect={false}
+                      autoComplete="username"
+                      textContentType="username"
                       returnKeyType="next"
                       blurOnSubmit={false}
                       onSubmitEditing={() => pinRef.current?.focus()}
@@ -160,16 +162,18 @@ export default function Login() {
                     />
                     <Field
                       inputRef={pinRef}
-                      label={apiMode === 'http' ? 'PIN' : 'Password'}
+                      label="Password"
                       value={password}
                       onChangeText={setPassword}
                       secureTextEntry={!showPin}
                       autoCapitalize="none"
                       autoCorrect={false}
+                      autoComplete="current-password"
+                      textContentType="password"
                       returnKeyType="go"
                       onSubmitEditing={() => void submitPassword()}
                       trailing={
-                        <Pressable accessibilityRole="button" accessibilityLabel={showPin ? 'Hide PIN' : 'Show PIN'} onPress={() => setShowPin((v) => !v)} hitSlop={8} style={{ paddingHorizontal: 14, height: 52, justifyContent: 'center' }}>
+                        <Pressable accessibilityRole="button" accessibilityLabel={showPin ? 'Hide password' : 'Show password'} onPress={() => setShowPin((v) => !v)} hitSlop={8} style={{ paddingHorizontal: 14, height: 52, justifyContent: 'center' }}>
                           <Ionicons name={showPin ? 'eye-off-outline' : 'eye-outline'} size={20} color={colors.muted} />
                         </Pressable>
                       }
@@ -178,7 +182,7 @@ export default function Login() {
                       <View style={{ width: 20, height: 20, borderRadius: 6, borderWidth: remember ? 0 : 1.5, borderColor: colors.faint, backgroundColor: remember ? colors.primary : 'transparent', alignItems: 'center', justifyContent: 'center' }}>
                         {remember ? <Ionicons name="checkmark" size={14} color="#FFFFFF" /> : null}
                       </View>
-                      <Text style={{ fontSize: 13, color: colors.muted }}>Remember my staff ID</Text>
+                      <Text style={{ fontSize: 13, color: colors.muted }}>Remember my username</Text>
                     </Pressable>
                     <Button title="Sign in" onPress={() => void submitPassword()} busy={busy} disabled={!canSubmit} />
                   </View>
@@ -210,7 +214,7 @@ export default function Login() {
             </View>
             <Text style={{ color: 'rgba(255,255,255,0.4)', fontSize: 11 }}>QSS Mobile Banking {Constants.expoConfig?.version ? `v${Constants.expoConfig.version}` : ''}</Text>
             {__DEV__ && apiMode === 'mock' && status !== 'locked' ? (
-              <Text style={{ color: 'rgba(255,255,255,0.5)', fontSize: 11, marginTop: 4 }}>Development mock: staff ID FO001, password Passw0rd!, code 123456.</Text>
+              <Text style={{ color: 'rgba(255,255,255,0.5)', fontSize: 11, marginTop: 4 }}>Development mock: username FO001, password Passw0rd!, code 123456.</Text>
             ) : null}
           </View>
         </ScrollView>

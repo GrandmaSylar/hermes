@@ -78,7 +78,7 @@ const make = (routes: Record<string, Route>) => {
 };
 
 describe('sign-in', () => {
-  test('signs in with staff id and PIN and takes the banker and limits from the answer', async () => {
+  test('signs in with username and password and takes the banker and limits from the answer', async () => {
     const { api, calls } = make({ 'POST /v1/auth/login': loginOk });
     const result = await api.login(' mabel ', '1234', DEVICE);
     expect(result.kind).toBe('SIGNED_IN');
@@ -105,9 +105,9 @@ describe('sign-in', () => {
     expect(result.session.limits).toEqual({ maxUnsyncedItems: 200, maxUnsyncedAmount: '50000.00', maxSingleAmount: '5000.00' });
   });
 
-  test('a wrong PIN says so plainly', async () => {
+  test('a wrong password says so plainly', async () => {
     const { api } = make({ 'POST /v1/auth/login': () => ({ status: 401, body: { message: 'Invalid credentials or account disabled.' } }) });
-    await expect(api.login('mabel', '0000', DEVICE)).rejects.toMatchObject({ kind: 'AUTH', message: 'Staff ID or PIN is incorrect.' });
+    await expect(api.login('mabel', '0000', DEVICE)).rejects.toMatchObject({ kind: 'AUTH', message: 'Username or password is incorrect.' });
   });
 
   test('a lockout shows the server\'s own wording and is not a sign-out', async () => {
@@ -120,9 +120,9 @@ describe('sign-in', () => {
     await expect(api.login('mabel', '1234', DEVICE)).rejects.toThrow(/no branch/);
   });
 
-  test('empty input is reported as a prompt, not as a bad PIN', async () => {
+  test('empty input is reported as a prompt, not as a bad password', async () => {
     const { api } = make({ 'POST /v1/auth/login': () => ({ status: 400, body: { message: 'Enter your staff ID, PIN and device id.' } }) });
-    await expect(api.login('', '', DEVICE)).rejects.toMatchObject({ kind: 'AUTH', message: 'Enter your staff ID and PIN.' });
+    await expect(api.login('', '', DEVICE)).rejects.toMatchObject({ kind: 'AUTH', message: 'Enter your username and password.' });
   });
 
   test('an answer without a session is a server problem', async () => {

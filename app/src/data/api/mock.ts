@@ -112,7 +112,7 @@ export class MockApi implements ApiClient {
   async login(staffId: string, password: string, _deviceId: string): Promise<SignInResult> {
     this.guard();
     if (staffId.trim().toUpperCase() !== MOCK_STAFF_ID || password !== MOCK_PASSWORD) {
-      throw new ApiError('AUTH', 'Staff ID or password is incorrect.');
+      throw new ApiError('AUTH', 'Username or password is incorrect.');
     }
     const challengeId = `challenge-${this.challenges.size + 1}`;
     this.challenges.add(challengeId);
