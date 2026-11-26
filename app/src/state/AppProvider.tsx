@@ -2,10 +2,12 @@ import NetInfo from '@react-native-community/netinfo';
 import * as Crypto from 'expo-crypto';
 import type * as SQLite from 'expo-sqlite';
 import { createContext, useCallback, useContext, useEffect, useMemo, useRef, useState, type ReactNode } from 'react';
-import { AppState } from 'react-native';
+import { AppState, useColorScheme } from 'react-native';
 import type { ApiCapabilities, ApiClient, MemberConflict, MemberLookup } from '@/data/api/contract';
 import { HttpApi } from '@/data/api/http';
 import type { PhotoAnswer } from '@/data/photos';
+import { applyPreference, loadPreference, savePreference, type Preference } from '@/ui/appearance';
+import { applyScheme, type Scheme } from '@/ui/colors';
 import { MockApi } from '@/data/api/mock';
 import { API_MODE, API_URL } from '@/config';
 import { openDatabase, wipeLocalData } from '@/data/db/database';
@@ -39,6 +41,8 @@ interface AppContextValue {
   capabilities: ApiCapabilities;
   /** Who already holds these IDs, phone numbers or emails. Null when there is no connection to ask. */
   checkMember: (lookup: MemberLookup) => Promise<MemberConflict[] | null>;
+  /** Light, dark (AMOLED) or follow the phone. */
+  appearance: { preference: Preference; scheme: Scheme; setPreference: (preference: Preference) => void };
   /** A member's passport photo from the office, or null when offline or there is none. */
   memberPhoto: (memberCode: string, have: string | null) => Promise<PhotoAnswer>;
   /** Where KYC pictures are kept on the phone until they are sent. */
@@ -61,6 +65,22 @@ export function useApp(): AppContextValue {
 }
 
 export function AppProvider({ children }: { children: ReactNode }) {
+  // The palette is swapped here, while rendering, so every screen below reads the right colours. A change in
+  // the phone's appearance (or the person's choice) re-renders this provider, and with it every screen using it.
+  const scheme: Scheme = useColorScheme() === 'dark' ? 'dark' : 'light';
+  applyScheme(scheme);
+  const [preference, setPreferenceState] = useState<Preference>('system');
+  useEffect(() => {
+    void loadPreference().then((saved) => {
+      setPreferenceState(saved);
+      applyPreference(saved);
+    });
+  }, []);
+  const setPreference = useCallback((next: Preference) => {
+    setPreferenceState(next);
+    applyPreference(next);
+    void savePreference(next);
+  }, []);
   const [status, setStatus] = useState<AppStatus>('loading');
   const [error, setError] = useState<string | null>(null);
   const [session, setSession] = useState<Session | null>(null);
@@ -245,6 +265,7 @@ export function AppProvider({ children }: { children: ReactNode }) {
     capabilities: api.capabilities,
     checkMember,
     memberPhoto,
+    appearance: { preference, scheme, setPreference },
     files,
     apiMode: API_MODE,
     signInOtp,

@@ -12,11 +12,11 @@ export interface Option {
 
 export const toOptions = (values: readonly string[]): Option[] => values.map((v) => ({ value: v, label: v }));
 
-const labelStyle = { fontSize: 12, color: colors.muted, marginBottom: 6, marginLeft: 2, fontWeight: '600' as const };
+const labelStyle = () => ({ fontSize: 12, color: colors.muted, marginBottom: 6, marginLeft: 2, fontWeight: '600' as const });
 
 export function Required({ label, required }: { label: string; required?: boolean }) {
   return (
-    <Text style={labelStyle}>
+    <Text style={labelStyle()}>
       {label}
       {required ? <Text style={{ color: colors.danger }}> *</Text> : null}
     </Text>
@@ -64,13 +64,13 @@ export function TextField(
           {
             minHeight: multiline ? 88 : 52,
             borderWidth: 1.5,
-            borderColor: error ? colors.danger : focused ? colors.primary : '#EEF1F6',
+            borderColor: error ? colors.danger : focused ? colors.primary : colors.fill,
             borderRadius: 14,
             borderCurve: 'continuous',
             paddingHorizontal: 14,
             paddingVertical: multiline ? 12 : 0,
             fontSize: 15,
-            backgroundColor: focused ? colors.card : '#EEF1F6',
+            backgroundColor: focused ? colors.card : colors.fill,
             color: colors.text,
             textAlignVertical: multiline ? 'top' : 'center',
           },
@@ -111,8 +111,8 @@ export function ChoiceField(props: {
                 borderCurve: 'continuous',
                 borderWidth: 1.5,
                 justifyContent: 'center',
-                borderColor: selected ? colors.primary : props.error ? colors.danger : '#EEF1F6',
-                backgroundColor: selected ? colors.primarySoft : '#EEF1F6',
+                borderColor: selected ? colors.primary : props.error ? colors.danger : colors.fill,
+                backgroundColor: selected ? colors.primarySoft : colors.fill,
               }}
             >
               <Text style={{ color: selected ? colors.primaryDeep : colors.text, fontWeight: selected ? '700' : '500' }}>{o.label}</Text>
@@ -162,14 +162,14 @@ export function SelectField(props: {
         style={{
           minHeight: 52,
           borderWidth: 1.5,
-          borderColor: props.error ? colors.danger : '#EEF1F6',
+          borderColor: props.error ? colors.danger : colors.fill,
           borderRadius: 14,
           borderCurve: 'continuous',
           paddingHorizontal: 14,
           flexDirection: 'row',
           alignItems: 'center',
           justifyContent: 'space-between',
-          backgroundColor: '#EEF1F6',
+          backgroundColor: colors.fill,
           opacity: props.disabled ? 0.5 : 1,
         }}
       >
@@ -183,7 +183,7 @@ export function SelectField(props: {
       <Modal visible={open} transparent animationType="slide" onRequestClose={close}>
         <Pressable style={{ flex: 1, backgroundColor: 'rgba(16,24,40,0.45)' }} onPress={close} />
         <View style={{ maxHeight: '72%', backgroundColor: colors.card, borderTopLeftRadius: 28, borderTopRightRadius: 28, paddingTop: 10, borderCurve: 'continuous' }}>
-          <View style={{ alignSelf: 'center', width: 40, height: 5, borderRadius: 3, backgroundColor: '#D5D9E2', marginBottom: 12 }} />
+          <View style={{ alignSelf: 'center', width: 40, height: 5, borderRadius: 3, backgroundColor: colors.grabber, marginBottom: 12 }} />
           <Text style={{ fontSize: 16, fontWeight: '700', color: colors.text, paddingHorizontal: 20, paddingBottom: 10, letterSpacing: -0.2 }}>{props.label}</Text>
           {searchable ? (
             <TextInput
@@ -196,7 +196,7 @@ export function SelectField(props: {
                 marginHorizontal: 16,
                 marginBottom: 8,
                 minHeight: 46,
-                backgroundColor: '#EEF1F6',
+                backgroundColor: colors.fill,
                 borderRadius: 14,
                 paddingHorizontal: 14,
                 color: colors.text,
@@ -216,7 +216,7 @@ export function SelectField(props: {
                 style={({ pressed }) => ({
                   paddingVertical: 14,
                   paddingHorizontal: 16,
-                  backgroundColor: pressed ? '#EEF2F6' : item.value === props.value ? colors.primarySoft : colors.card,
+                  backgroundColor: pressed ? colors.pressed : item.value === props.value ? colors.primarySoft : colors.card,
                   borderTopWidth: 1,
                   borderTopColor: colors.border,
                 })}

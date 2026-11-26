@@ -9,9 +9,11 @@ import { colors } from '@/ui/theme';
  * ("Maximum update depth exceeded") while the app was still loading.
  */
 function Screens() {
-  const { status } = useApp();
+  const { status, appearance } = useApp();
   const signedIn = status === 'ready';
   return (
+    <>
+    <StatusBar style={appearance.scheme === 'dark' ? 'light' : 'dark'} />
     <Stack
       screenOptions={{
         headerStyle: { backgroundColor: colors.bg },
@@ -36,13 +38,13 @@ function Screens() {
         <Stack.Screen name="history" options={{ title: 'Activity history', headerBackButtonDisplayMode: 'minimal' }} />
       </Stack.Protected>
     </Stack>
+    </>
   );
 }
 
 export default function RootLayout() {
   return (
     <AppProvider>
-      <StatusBar style="dark" />
       <Screens />
     </AppProvider>
   );

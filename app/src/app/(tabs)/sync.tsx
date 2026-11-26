@@ -8,6 +8,7 @@ import { documentSummary, fullName, type RegistrationItem } from '@/domain/regis
 import { PRODUCT_LABELS, type OutboxItem } from '@/domain/types';
 import { useApp } from '@/state/AppProvider';
 import { KV_PULLED_AT } from '@/sync/engine';
+import { AppearanceCard } from '@/ui/appearance-card';
 import { Reveal, Skeleton } from '@/ui/motion';
 import { Button, Card, SectionLabel, StatusPill, colors } from '@/ui/theme';
 
@@ -166,7 +167,8 @@ export default function SyncTab() {
         )
       }
       ListFooterComponent={
-        <View style={{ marginTop: 12 }}>
+        <View style={{ marginTop: 12, gap: 16 }}>
+          <AppearanceCard />
           <Button title="Sign out" variant="danger" onPress={() => void confirmSignOut()} />
         </View>
       }

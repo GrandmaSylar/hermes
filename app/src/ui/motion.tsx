@@ -112,7 +112,7 @@ export function BrandLoader({ size = 72, children }: { size?: number; children?:
   return (
     <View accessibilityRole="progressbar" accessibilityLabel="Loading" style={{ width: size * 1.6, height: size * 1.6, alignItems: 'center', justifyContent: 'center' }}>
       {[0, 0.5].map((d) => (
-        <Animated.View key={d} style={[{ position: 'absolute', width: size, height: size, borderRadius: size / 2, borderWidth: 2, borderColor: d === 0 ? '#03305C' : '#EA3137' }, ring(d)]} />
+        <Animated.View key={d} style={[{ position: 'absolute', width: size, height: size, borderRadius: size / 2, borderWidth: 2, borderColor: d === 0 ? colors.primary : '#EA3137' }, ring(d)]} />
       ))}
       {children ?? <View style={{ width: size * 0.5, height: size * 0.5, borderRadius: size * 0.25, backgroundColor: colors.primary }} />}
     </View>
@@ -128,7 +128,7 @@ export function Skeleton({ width, height = 14, radius = 8, style }: { width?: nu
     loop.start();
     return () => loop.stop();
   }, [sweep]);
-  return <Animated.View style={[{ width: width ?? '100%', height, borderRadius: radius, backgroundColor: '#E3E7EE', opacity: sweep.interpolate({ inputRange: [0, 1], outputRange: [0.55, 1] }) }, style]} />;
+  return <Animated.View style={[{ width: width ?? '100%', height, borderRadius: radius, backgroundColor: colors.track, opacity: sweep.interpolate({ inputRange: [0, 1], outputRange: [0.55, 1] }) }, style]} />;
 }
 
 /** A row-shaped placeholder for lists. */

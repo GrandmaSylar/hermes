@@ -7,13 +7,14 @@ import { Dots, PressScale } from '@/ui/motion';
 
 export { colors };
 
-export const STATUS_STYLE: Record<OutboxStatus, { label: string; fg: string; bg: string }> = {
-  PENDING: { label: 'Waiting to sync', fg: colors.warn, bg: colors.warnBg },
-  SENDING: { label: 'Syncing…', fg: colors.primary, bg: colors.primarySoft },
-  SYNCED: { label: 'Pending approval', fg: colors.ok, bg: colors.okBg },
-  REJECTED: { label: 'Rejected', fg: colors.danger, bg: colors.dangerBg },
-  CONFLICT: { label: 'Needs attention', fg: colors.danger, bg: colors.dangerBg },
-};
+export const statusStyle = (status: OutboxStatus): { label: string; fg: string; bg: string } =>
+  ({
+    PENDING: { label: 'Waiting to sync', fg: colors.warn, bg: colors.warnBg },
+    SENDING: { label: 'Syncing…', fg: colors.primary, bg: colors.primarySoft },
+    SYNCED: { label: 'Pending approval', fg: colors.ok, bg: colors.okBg },
+    REJECTED: { label: 'Rejected', fg: colors.danger, bg: colors.dangerBg },
+    CONFLICT: { label: 'Needs attention', fg: colors.danger, bg: colors.dangerBg },
+  })[status];
 
 /** The look shared by every card and sheet. */
 export const RADIUS = { borderCurve: 'continuous' as const };
@@ -73,8 +74,8 @@ export function Field(props: TextInputProps & { label: string; error?: string | 
         style={{
           borderRadius: 14,
           borderWidth: 1.5,
-          backgroundColor: ring.interpolate({ inputRange: [0, 1], outputRange: ['#EEF1F6', '#FFFFFF'] }),
-          borderColor: error ? colors.danger : ring.interpolate({ inputRange: [0, 1], outputRange: ['#EEF1F6', colors.primary] }),
+          backgroundColor: ring.interpolate({ inputRange: [0, 1], outputRange: [colors.fill, colors.card] }),
+          borderColor: error ? colors.danger : ring.interpolate({ inputRange: [0, 1], outputRange: [colors.fill, colors.primary] }),
           ...RADIUS,
         }}
       >
@@ -100,7 +101,7 @@ export function Field(props: TextInputProps & { label: string; error?: string | 
 }
 
 export function StatusPill({ status }: { status: OutboxStatus }) {
-  const s = STATUS_STYLE[status];
+  const s = statusStyle(status);
   return (
     <View style={{ alignSelf: 'flex-start', borderRadius: 999, paddingHorizontal: 10, paddingVertical: 4, backgroundColor: s.bg }}>
       <Text style={{ fontSize: 12, fontWeight: '700', color: s.fg }}>{s.label}</Text>

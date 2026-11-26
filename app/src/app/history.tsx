@@ -170,7 +170,7 @@ export default function HistoryScreen() {
   return (
     <ScrollView contentInsetAdjustmentBehavior="automatic" style={{ backgroundColor: colors.bg }} contentContainerStyle={{ padding: 16, paddingBottom: insets.bottom + 32, gap: 16 }}>
       {/* Deposits or registrations */}
-      <View style={{ flexDirection: 'row', padding: 3, borderRadius: 12, backgroundColor: '#E5E7EB', ...RADIUS }}>
+      <View style={{ flexDirection: 'row', padding: 3, borderRadius: 12, backgroundColor: colors.track, ...RADIUS }}>
         {(['deposits', 'registrations'] as const).map((t) => (
           <Pressable
             key={t}

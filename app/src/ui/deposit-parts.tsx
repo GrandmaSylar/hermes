@@ -37,7 +37,7 @@ export function ChoiceRow(props: { selected: boolean; onPress: () => void; child
           height: 24,
           borderRadius: 12,
           borderWidth: props.selected ? 0 : 2,
-          borderColor: '#C4C9D4',
+          borderColor: colors.faint,
           backgroundColor: props.selected ? colors.primary : 'transparent',
           alignItems: 'center',
           justifyContent: 'center',
@@ -122,7 +122,7 @@ export function ConfirmDepositModal(props: {
         if (!props.saving) props.onBack();
       }}
     >
-      <View style={{ flex: 1, backgroundColor: 'rgba(8, 20, 45, 0.72)', justifyContent: 'center', padding: 22 }}>
+      <View style={{ flex: 1, backgroundColor: colors.scrim, justifyContent: 'center', padding: 22 }}>
         {summary ? (
           <Animated.View
             style={{
@@ -157,9 +157,9 @@ export function ConfirmDepositModal(props: {
 
                 {/* Perforated divider */}
                 <View style={{ flexDirection: 'row', alignItems: 'center', marginVertical: 18, marginHorizontal: -22 }}>
-                  <View style={{ width: 16, height: 32, borderTopRightRadius: 16, borderBottomRightRadius: 16, backgroundColor: 'rgba(8, 20, 45, 0.72)' }} />
-                  <View style={{ flex: 1, borderTopWidth: 2, borderStyle: 'dashed', borderColor: '#D5D9E2' }} />
-                  <View style={{ width: 16, height: 32, borderTopLeftRadius: 16, borderBottomLeftRadius: 16, backgroundColor: 'rgba(8, 20, 45, 0.72)' }} />
+                  <View style={{ width: 16, height: 32, borderTopRightRadius: 16, borderBottomRightRadius: 16, backgroundColor: colors.scrim }} />
+                  <View style={{ flex: 1, borderTopWidth: 2, borderStyle: 'dashed', borderColor: colors.grabber }} />
+                  <View style={{ width: 16, height: 32, borderTopLeftRadius: 16, borderBottomLeftRadius: 16, backgroundColor: colors.scrim }} />
                 </View>
 
                 <View style={{ gap: 12 }}>

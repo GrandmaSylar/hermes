@@ -21,7 +21,7 @@ function MemberRow({ member, index }: { member: Member; index: number }) {
           <View style={{ flex: 1, gap: 2 }}>
             <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6 }}>
               <Text numberOfLines={1} style={{ flexShrink: 1, fontSize: 15, color: colors.text, fontWeight: '700' }}>{member.name}</Text>
-              {member.myCustomer ? <Ionicons name="star" size={14} color="#F5A623" /> : null}
+              {member.myCustomer ? <Ionicons name="star" size={14} color={colors.star} /> : null}
             </View>
             <Text numberOfLines={1} style={{ color: colors.muted, fontSize: 12 }}>{[member.memberCode, member.phone].filter(Boolean).join(' · ')}</Text>
             {status ? (
@@ -30,7 +30,7 @@ function MemberRow({ member, index }: { member: Member; index: number }) {
               </View>
             ) : null}
           </View>
-          <Ionicons name="chevron-forward" size={18} color="#C4C9D4" />
+          <Ionicons name="chevron-forward" size={18} color={colors.faint} />
         </View>
       </PressScale>
     </Reveal>
@@ -116,7 +116,7 @@ export default function MembersTab() {
               minHeight: 50,
               paddingHorizontal: 14,
               borderRadius: 14,
-              backgroundColor: focused ? colors.card : '#E8ECF2',
+              backgroundColor: focused ? colors.card : colors.fill,
               borderWidth: 1.5,
               borderColor: focused ? colors.primary : 'transparent',
               ...RADIUS,

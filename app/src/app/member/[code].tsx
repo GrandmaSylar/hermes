@@ -77,7 +77,7 @@ export default function MemberScreen() {
           title: '',
           headerRight: () => (
             <PressScale accessibilityRole="button" accessibilityLabel={member.myCustomer ? 'Remove from My customers' : 'Add to My customers'} onPress={() => void toggle()} haptic={false} style={{ padding: 6 }}>
-              <Ionicons name={member.myCustomer ? 'star' : 'star-outline'} size={24} color={member.myCustomer ? '#F5A623' : colors.primary} />
+              <Ionicons name={member.myCustomer ? 'star' : 'star-outline'} size={24} color={member.myCustomer ? colors.star : colors.primary} />
             </PressScale>
           ),
         }}

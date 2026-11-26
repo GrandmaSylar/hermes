@@ -56,7 +56,7 @@ export function Receipt(props: { brand: Brand; title: string; amount: string; at
       {/* Letterhead */}
       <View style={{ alignItems: 'center', gap: 6, paddingTop: 24, paddingHorizontal: 20, paddingBottom: 8 }}>
         {brand.logo ? (
-          <Image source={{ uri: brand.logo }} contentFit="contain" accessibilityLabel={`${brand.creditUnion || 'Credit union'} logo`} style={{ width: 72, height: 72, borderRadius: 16 }} />
+          <Image source={{ uri: brand.logo }} contentFit="contain" accessibilityLabel={`${brand.creditUnion || 'Credit union'} logo`} style={{ width: 72, height: 72, borderRadius: 16, backgroundColor: '#FFFFFF' }} />
         ) : null}
         {brand.creditUnion ? <Text selectable style={{ fontSize: 15, fontWeight: '700', color: colors.text, textAlign: 'center', letterSpacing: -0.2 }}>{brand.creditUnion}</Text> : null}
         {brand.branch ? <Text selectable style={{ fontSize: 12, color: colors.muted, textAlign: 'center' }}>{brand.branch}</Text> : null}
@@ -75,7 +75,7 @@ export function Receipt(props: { brand: Brand; title: string; amount: string; at
       {/* Perforation */}
       <View style={{ flexDirection: 'row', alignItems: 'center', marginVertical: 6 }}>
         <View style={{ width: 14, height: 28, borderTopRightRadius: 14, borderBottomRightRadius: 14, backgroundColor: colors.bg }} />
-        <View style={{ flex: 1, borderTopWidth: 2, borderStyle: 'dashed', borderColor: '#D5D9E2' }} />
+        <View style={{ flex: 1, borderTopWidth: 2, borderStyle: 'dashed', borderColor: colors.grabber }} />
         <View style={{ width: 14, height: 28, borderTopLeftRadius: 14, borderBottomLeftRadius: 14, backgroundColor: colors.bg }} />
       </View>
 

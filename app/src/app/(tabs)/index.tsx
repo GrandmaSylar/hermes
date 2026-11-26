@@ -38,7 +38,7 @@ function Segmented({ value, onChange }: { value: 'today' | 'all'; onChange: (v: 
       onPress={() => onChange(key)}
       style={{ flex: 1, minHeight: 32, alignItems: 'center', justifyContent: 'center', borderRadius: 8, backgroundColor: value === key ? '#FFFFFF' : 'transparent' }}
     >
-      <Text style={{ fontSize: 12, fontWeight: '600', color: value === key ? colors.primaryDeep : 'rgba(255,255,255,0.85)' }}>{label}</Text>
+      <Text style={{ fontSize: 12, fontWeight: '600', color: value === key ? '#0D2B52' : 'rgba(255,255,255,0.85)' }}>{label}</Text>
     </Pressable>
   );
   return (

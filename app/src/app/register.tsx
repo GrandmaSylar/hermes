@@ -231,7 +231,7 @@ export default function RegisterScreen() {
       <View style={{ paddingHorizontal: 16, paddingTop: 8, paddingBottom: 10, gap: 8 }}>
         <View style={{ flexDirection: 'row', gap: 4 }}>
           {STEPS.map((x, i) => (
-            <Pressable key={x.id} accessibilityRole="button" accessibilityLabel={`Step ${i + 1}, ${x.label}`} disabled={i >= step} onPress={() => goTo(i)} hitSlop={{ top: 10, bottom: 10 }} style={{ flex: 1, height: 5, borderRadius: 3, backgroundColor: i <= step ? colors.primary : '#DDE2EA', opacity: i < step ? 0.55 : 1 }} />
+            <Pressable key={x.id} accessibilityRole="button" accessibilityLabel={`Step ${i + 1}, ${x.label}`} disabled={i >= step} onPress={() => goTo(i)} hitSlop={{ top: 10, bottom: 10 }} style={{ flex: 1, height: 5, borderRadius: 3, backgroundColor: i <= step ? colors.primary : colors.track, opacity: i < step ? 0.55 : 1 }} />
           ))}
         </View>
         <View style={{ flexDirection: 'row', alignItems: 'baseline', justifyContent: 'space-between' }}>
