@@ -13,6 +13,12 @@
       "distribution": "internal",
       "android": { "buildType": "apk" }
     },
+    "field-test": {
+      "extends": "preview",
+      "env": {
+        "EXPO_PUBLIC_API_URL": "https://187-77-163-172.sslip.io"
+      }
+    },
     "production": {
       "autoIncrement": true
     }
