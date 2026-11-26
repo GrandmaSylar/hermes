@@ -1,7 +1,7 @@
 import type * as SQLite from 'expo-sqlite';
 
 /** Bump when a migration step is added below. */
-export const SCHEMA_VERSION = 5;
+export const SCHEMA_VERSION = 7;
 
 /** The slice of expo-sqlite that migrations use, so tests can run them on another SQLite. */
 export type MigrationDb = Pick<SQLite.SQLiteDatabase, 'getFirstAsync' | 'execAsync' | 'withTransactionAsync'>;
@@ -113,6 +113,28 @@ export async function migrate(db: MigrationDb): Promise<void> {
           FROM members WHERE savings_account_id IS NOT NULL;
         ALTER TABLE outbox ADD COLUMN account_label TEXT;
         ALTER TABLE outbox ADD COLUMN payment_mode TEXT NOT NULL DEFAULT 'CASH';
+      `);
+    }
+    if (current < 6) {
+      // The whole registration form, as JSON, so every field the office's form collects is kept and sent.
+      // Registrations saved before this have none (they could never be sent: the core could not receive them).
+      await db.execAsync(`ALTER TABLE registrations ADD COLUMN payload TEXT;`);
+    }
+    if (current < 7) {
+      // KYC pictures chosen for a registration: where each is kept on the phone and whether it has been sent.
+      await db.execAsync(`
+        CREATE TABLE registration_files (
+          local_reg_id TEXT NOT NULL,
+          kind         TEXT NOT NULL,
+          uri          TEXT NOT NULL,
+          name         TEXT NOT NULL,
+          mime_type    TEXT NOT NULL,
+          size         INTEGER NOT NULL,
+          status       TEXT NOT NULL DEFAULT 'PENDING',
+          attempts     INTEGER NOT NULL DEFAULT 0,
+          last_error   TEXT,
+          PRIMARY KEY (local_reg_id, kind)
+        );
       `);
     }
     await db.execAsync(`PRAGMA user_version = ${SCHEMA_VERSION}`);

@@ -1,9 +1,14 @@
 import { kindForProduct, sumBalances } from '@/domain/deposit';
+import type { MemberTypeOption } from '@/domain/registration';
 import type { AccountOption, MemberAccounts, MobilizerLimits, Session } from '@/domain/types';
 import {
   ApiError,
   type ApiCapabilities,
   type ApiClient,
+  type DocumentResult,
+  type DocumentUpload,
+  type MemberConflict,
+  type MemberLookup,
   type MemberPage,
   type OfficeDecision,
   type PushItem,
@@ -162,6 +167,7 @@ export class HttpApi implements ApiClient {
   readonly capabilities: ApiCapabilities = {
     otp: false,
     registration: false,
+    documents: false,
     officeDecisions: true,
     // Hidden until the core can record Mobile Money as such: approval would post it as banker cash.
     mobileMoney: false,
@@ -342,9 +348,70 @@ export class HttpApi implements ApiClient {
     return decisions;
   }
 
-  async pushRegistrations(_session: Session, _items: PushRegistration[]): Promise<RegistrationResult[]> {
-    // Switched off in `capabilities`; the sync engine never calls this.
-    throw new ApiError('SERVER', 'Registering members from the field is not available yet.');
+  /** Registration is only offered once the server says it is switched on (its database must allow it). */
+  async refreshCapabilities(session: Session): Promise<void> {
+    const body = asRecord(await this.send(session, 'GET', `${V1}/me`));
+    const capabilities = asRecord(body.capabilities);
+    this.capabilities.registration = capabilities.registration === true;
+    this.capabilities.documents = capabilities.documents === true;
+  }
+
+  async pushRegistrations(session: Session, items: PushRegistration[]): Promise<RegistrationResult[]> {
+    const results: RegistrationResult[] = [];
+    for (const item of items) results.push(await this.registerOne(session, item));
+    return results;
+  }
+
+  private async registerOne(session: Session, item: PushRegistration): Promise<RegistrationResult> {
+    const id = item.localRegistrationId;
+    try {
+      const saved = asRecord(await this.send(session, 'POST', `${V1}/registrations`, item));
+      const status = asText(saved.status) === 'DUPLICATE' ? 'DUPLICATE' : 'ACCEPTED';
+      return { localRegistrationId: id, status, serverId: asText(saved.serverId) || undefined };
+    } catch (error) {
+      if (error instanceof HttpStatusError) {
+        // 409: the same id came back with different details. 400 and 422: the rules refused it.
+        return { localRegistrationId: id, status: error.status === 409 ? 'CONFLICT' : 'REJECTED', reason: error.message };
+      }
+      throw error;
+    }
+  }
+
+  async uploadDocument(session: Session, memberCode: string, upload: DocumentUpload): Promise<DocumentResult> {
+    try {
+      // A picture is a few hundred kilobytes: give a slow connection longer than a normal request.
+      await this.send(session, 'POST', `${V1}/members/${encodeURIComponent(memberCode)}/documents`, upload, {}, false, this.timeoutMs * 3);
+      return { status: 'SAVED' };
+    } catch (error) {
+      if (error instanceof HttpStatusError) return { status: error.status === 409 ? 'CONFLICT' : 'REJECTED', reason: error.message };
+      throw error;
+    }
+  }
+
+  async memberTypes(session: Session): Promise<MemberTypeOption[]> {
+    const body = asRecord(await this.send(session, 'GET', `${V1}/member-types`));
+    const types: MemberTypeOption[] = [];
+    for (const row of Array.isArray(body.items) ? body.items.map(asRecord) : []) {
+      const code = asText(row.code).trim();
+      if (!code) continue;
+      types.push({
+        code,
+        label: asText(row.label).trim() || code,
+        sharesOptional: row.sharesOptional === true,
+        guardianRequired: row.guardianRequired === true,
+      });
+    }
+    return types;
+  }
+
+  async checkMember(session: Session, lookup: MemberLookup): Promise<MemberConflict[]> {
+    const body = asRecord(await this.send(session, 'POST', `${V1}/members/check`, lookup));
+    return (Array.isArray(body.conflicts) ? body.conflicts.map(asRecord) : []).map((c) => ({
+      label: asText(c.label),
+      value: asText(c.value),
+      memberCode: asText(c.memberCode),
+      memberName: asText(c.memberName),
+    }));
   }
 
   // ---- plumbing -------------------------------------------------------
@@ -355,12 +422,12 @@ export class HttpApi implements ApiClient {
    * and server trouble SERVER, so the sync engine can react to each. Other 4xx
    * answers are about this request alone and come back as HttpStatusError.
    */
-  private async send(session: Session | null, method: string, path: string, body?: unknown, headers: Record<string, string> = {}, renewed = false): Promise<unknown> {
+  private async send(session: Session | null, method: string, path: string, body?: unknown, headers: Record<string, string> = {}, renewed = false, timeoutMs = this.timeoutMs): Promise<unknown> {
     if (session && this.tokens === null) {
       this.tokens = { accessToken: session.accessToken, refreshToken: session.refreshToken };
     }
     const controller = new AbortController();
-    const timer = setTimeout(() => controller.abort(), this.timeoutMs);
+    const timer = setTimeout(() => controller.abort(), timeoutMs);
     let response: Response;
     try {
       response = await this.fetchImpl(`${this.baseUrl}${path}`, {
@@ -392,7 +459,7 @@ export class HttpApi implements ApiClient {
     if (response.status === 401) {
       if (session && !renewed) {
         await this.renew();
-        return this.send(session, method, path, body, headers, true);
+        return this.send(session, method, path, body, headers, true, timeoutMs);
       }
       throw new ApiError('AUTH', session ? 'Your session has ended. Sign in again.' : message);
     }

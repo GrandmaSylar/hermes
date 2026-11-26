@@ -51,5 +51,12 @@ export async function openDatabase(): Promise<SQLite.SQLiteDatabase> {
 
 /** Wipes the encryption key and all local data, e.g. on remote kill or sign-out of a device. */
 export async function wipeLocalData(db: SQLite.SQLiteDatabase): Promise<void> {
-  await db.execAsync('DELETE FROM outbox; DELETE FROM registrations; DELETE FROM member_accounts; DELETE FROM members; DELETE FROM kv;');
+  await db.execAsync('DELETE FROM outbox; DELETE FROM registration_files; DELETE FROM registrations; DELETE FROM member_accounts; DELETE FROM members; DELETE FROM kv;');
+  // Member pictures waiting to be sent are personal data too.
+  try {
+    const FileSystem = await import('expo-file-system/legacy');
+    await FileSystem.deleteAsync(`${FileSystem.documentDirectory}kyc/`, { idempotent: true });
+  } catch {
+    // nothing to remove
+  }
 }

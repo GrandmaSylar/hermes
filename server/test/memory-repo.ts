@@ -1,12 +1,18 @@
+import { DocumentError } from '../src/mssql-documents';
+import type { CheckedDocument } from '../src/documents';
 import { toMinor } from '../src/money';
 import { originalReference, REF_PREFIX, storedReference } from '../src/reference';
+import type { RegistrationBody } from '../src/registration';
 import type {
   AccountInfo,
   DepositInput,
   DepositKind,
   DepositRow,
   InsertOutcome,
+  MemberConflict,
+  MemberLookup,
   MemberRow,
+  MemberTypeRow,
   Officer,
   Repo,
   SmsLogEntry,
@@ -25,6 +31,82 @@ export class MemoryRepo implements Repo {
   recipients = new Map<string, SmsRecipient>();
   smsLog: (SmsLogEntry & { messageType: string })[] = [];
   private next = 1000;
+  /** Registration is on by default; a test turns it off to see the switched-off behaviour. */
+  registrationEnabled = true;
+  documentsEnabled = true;
+  /** KYC files saved by saveMemberDocument, one per member and kind. Members in `approved` are no longer pending. */
+  documents = new Map<string, CheckedDocument>();
+  approved = new Set<string>();
+  memberTypes: MemberTypeRow[] = [
+    { code: 'IND', description: 'INDIVIDUAL' },
+    { code: 'KID', description: 'KIDDY SAVINGS' },
+    { code: 'JNT', description: 'JOINT' },
+  ];
+  /** Members created by registerMember, with who made them and when. */
+  registered: { memberCode: string; by: string; body: RegistrationBody; branchCode: string }[] = [];
+  /** Members that already exist, for the duplicate checks. */
+  existing: { code: string; name: string; nationalId?: string; voterIdNo?: string; nhisNo?: string; passportNo?: string; phone?: string; email?: string }[] = [];
+
+  describeSchema() {
+    return { sharesEnabled: true, registrationEnabled: this.registrationEnabled, documentsEnabled: this.documentsEnabled };
+  }
+  async listMemberTypes() {
+    return this.memberTypes;
+  }
+  async findMemberConflicts(lookup: MemberLookup): Promise<MemberConflict[]> {
+    const out: MemberConflict[] = [];
+    const all = [
+      ...this.existing,
+      ...this.registered.map((r) => ({
+        code: r.memberCode,
+        name: `${r.body.firstName} ${r.body.lastName}`,
+        nationalId: r.body.nationalId,
+        voterIdNo: r.body.voterIdNo,
+        nhisNo: r.body.nhisNo,
+        passportNo: r.body.passportNo,
+        phone: r.body.phone,
+        email: r.body.email,
+      })),
+    ];
+    const fields = [
+      ['Ghana Card', 'nationalId', lookup.ids.nationalId],
+      ['Voter ID', 'voterIdNo', lookup.ids.voterIdNo],
+      ['NHIS card', 'nhisNo', lookup.ids.nhisNo],
+      ['Passport', 'passportNo', lookup.ids.passportNo],
+    ] as const;
+    for (const [label, key, value] of fields) {
+      if (!value) continue;
+      const m = all.find((x) => (x[key] ?? '').toUpperCase() === value.toUpperCase());
+      if (m) out.push({ label, value, memberCode: m.code, memberName: m.name });
+    }
+    if (lookup.phone) {
+      const m = all.find((x) => x.phone && x.phone.replace(/\s/g, '') === lookup.phone!.replace(/\s/g, ''));
+      if (m) out.push({ label: 'Phone', value: lookup.phone, memberCode: m.code, memberName: m.name });
+    }
+    if (lookup.email) {
+      const m = all.find((x) => x.email && x.email.toLowerCase() === lookup.email!.toLowerCase());
+      if (m) out.push({ label: 'Email', value: lookup.email, memberCode: m.code, memberName: m.name });
+    }
+    return out;
+  }
+  async findEarlierRegistration(officer: Officer, body: RegistrationBody) {
+    const r = this.registered.find(
+      (x) => x.by === officer.staffId && x.body.firstName === body.firstName && x.body.lastName === body.lastName && x.body.birthDate === body.birthDate,
+    );
+    return r?.memberCode ?? null;
+  }
+  async registerMember(officer: Officer, body: RegistrationBody) {
+    const memberCode = `${officer.branchCode.padStart(3, '0')}${String(4000 + this.registered.length).padStart(7, '0')}`;
+    this.registered.push({ memberCode, by: officer.staffId, body, branchCode: officer.branchCode });
+    return { memberCode };
+  }
+
+  async saveMemberDocument(officer: Officer, memberCode: string, doc: CheckedDocument) {
+    const member = this.registered.find((r) => r.memberCode === memberCode && r.by === officer.staffId);
+    if (!member) throw new DocumentError(404, 'That member was not found.');
+    if (this.approved.has(memberCode)) throw new DocumentError(409, 'This member has already been approved, so documents can no longer be added from the phone.');
+    this.documents.set(`${memberCode}:${doc.kind}`, doc);
+  }
 
   async findOfficer(username: string) {
     return this.officers.find((o) => o.staffId === username) ?? null;

@@ -9,10 +9,24 @@ const table = (t: string, cols: string[]): ColumnRow[] => cols.map((column) => (
 const SAVINGS_TX = ['SavingsTransactionID', 'SerialNo', 'SavingsAccountID', 'CustomerCode', 'TransactionDate', 'SavingsCode', 'TransactionType', 'Debit', 'Credit', 'Balance', 'Description', 'ReferenceNumber', 'PaymentMethod', 'BranchCode', 'UserID', 'IsReversed', 'IsActive', 'BankingType', 'Status', 'CreatedAt', 'UpdatedAt', 'ApprovedAt'];
 const SHARE_TX = ['ShareTransactionID', 'SerialNo', 'ShareHoldingID', 'CustomerCode', 'TransactionDate', 'ShareCode', 'TransactionType', 'TransactionAmount', 'Credit', 'Description', 'ReferenceNumber', 'ValueDate', 'UserID', 'BankingType', 'Status', 'CreatedAt'];
 
-function rows(over: { oldProducts?: boolean; noShares?: boolean; noSms?: boolean } = {}): ColumnRow[] {
+const REGISTRATION_TABLES = [
+  ...table('CustomerType', ['Code', 'Description']),
+  ...table('CustomerContact', ['CustomerID', 'PhoneNo', 'EmailAddress', 'ContactValue']),
+  ...table('CustomerAddress', ['CustomerID', 'AddressTypeID', 'ResidentialAddress', 'City', 'Region']),
+  ...table('CustomerFinancial', ['CustomerID']),
+  ...table('CustomerEmployment', ['CustomerID']),
+  ...table('CustomerBeneficiary', ['CustomerID', 'PercentAllot']),
+  ...table('CustomerAlertPreferences', ['CustomerID']),
+  ...table('CustomerGuardian', ['CustomerID']),
+  ...table('CustomerCompliance', ['CustomerID']),
+  ...table('CustomerMedia', ['CustomerID', 'MainPicture', 'MainSignature', 'NationalIdentity', 'PictureTwo', 'CreatedAt']),
+];
+
+function rows(over: { oldProducts?: boolean; noShares?: boolean; noSms?: boolean; noRegistration?: boolean } = {}): ColumnRow[] {
   const base = [
     ...table('FieldOfficer', ['FieldOfficerID', 'Username', 'PasswordHash', 'BranchCode', 'EmployeeID', 'FullName', 'IsActive', 'UsrEnabled']),
-    ...table('Customer', ['Code', 'FullName', 'BranchCode', 'CustomerID', 'FirstName', 'PhoneNo', 'StatusCode', 'IsActive']),
+    ...table('Customer', ['Code', 'FullName', 'BranchCode', 'CustomerID', 'FirstName', 'LastName', 'MiddleName', 'BirthDate', 'DateRegistered', 'CustomerType', 'Sex', 'MaritalStatus', 'MemberType', 'NationalID', 'RegistrationNo', 'StaffNo', 'CreatedBy', 'CreatedAt', 'AccountType', 'PhoneNo', 'StatusCode', 'IsActive']),
+    ...(over.noRegistration ? [] : REGISTRATION_TABLES),
     ...table('SavingsAccount', ['SavingsAccountID', 'CustomerCode', 'SavingsProductCode', 'AccountNumber', 'CurrentBalance', 'AccountStatus', 'IsDormant', 'DateClosed', 'DateOpened', 'BranchCode']),
     ...table('SavingsProduct', over.oldProducts
       ? ['Code', 'Description', 'ProductName', 'MinimumBalance']
@@ -45,6 +59,12 @@ describe('schema probe', () => {
     expect(sp.activeCondition).toContain('IsActive');
     expect(sp.min).toContain('MinimumDeposit');
     expect(sp.max).toContain('MaximumDeposit');
+  });
+
+  test('registration is off until the registration tables are visible to the login', () => {
+    const { schema } = buildSchema(rows({ noRegistration: true }));
+    expect(describeSchema(schema).registrationEnabled).toBe(false);
+    expect(describeSchema(buildSchema(rows()).schema).registrationEnabled).toBe(true);
   });
 
   test('an old schema skips the product rules and never mentions the missing columns', () => {
@@ -136,7 +156,7 @@ describe('member display name', () => {
   });
 
   test('uses FullName alone when the name parts do not exist', () => {
-    const { schema } = buildSchema(rows().filter((r) => !(r.table === 'Customer' && r.column === 'FirstName')));
+    const { schema } = buildSchema(rows().filter((r) => !(r.table === 'Customer' && ['FirstName', 'MiddleName', 'LastName'].includes(r.column))));
     expect(nameExpr(schema)).toBe('c.FullName');
   });
 });

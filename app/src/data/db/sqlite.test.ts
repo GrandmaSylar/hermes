@@ -64,7 +64,7 @@ describe('migration', () => {
     const db = createNodeSqlite();
     await migrate(db);
     expect(await db.getFirstAsync('PRAGMA user_version')).toEqual({ user_version: SCHEMA_VERSION });
-    expect(SCHEMA_VERSION).toBe(5);
+    expect(SCHEMA_VERSION).toBe(7);
     const tables = (await db.getAllAsync<{ name: string }>("SELECT name FROM sqlite_master WHERE type = 'table' ORDER BY name")).map((t) => t.name);
     expect(tables).toEqual(expect.arrayContaining(['members', 'outbox', 'registrations', 'kv', 'member_accounts']));
   });
@@ -85,7 +85,7 @@ describe('migration', () => {
 
     await migrate(db);
 
-    expect(await db.getFirstAsync('PRAGMA user_version')).toEqual({ user_version: 5 });
+    expect(await db.getFirstAsync('PRAGMA user_version')).toEqual({ user_version: 7 });
     const repos = createSqliteRepos(db);
 
     const ama = await repos.members.get('100001');

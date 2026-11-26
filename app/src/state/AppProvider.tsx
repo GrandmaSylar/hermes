@@ -3,12 +3,13 @@ import * as Crypto from 'expo-crypto';
 import type * as SQLite from 'expo-sqlite';
 import { createContext, useCallback, useContext, useEffect, useMemo, useRef, useState, type ReactNode } from 'react';
 import { AppState } from 'react-native';
-import type { ApiCapabilities, ApiClient } from '@/data/api/contract';
+import type { ApiCapabilities, ApiClient, MemberConflict, MemberLookup } from '@/data/api/contract';
 import { HttpApi } from '@/data/api/http';
 import { MockApi } from '@/data/api/mock';
 import { API_MODE, API_URL } from '@/config';
 import { openDatabase, wipeLocalData } from '@/data/db/database';
 import { createSqliteRepos } from '@/data/db/sqlite-repos';
+import { createFileStore, type FileStore } from '@/data/files';
 import type { Repos } from '@/data/repositories';
 import type { Session } from '@/domain/types';
 import { syncOnce, type SyncReport } from '@/sync/engine';
@@ -35,6 +36,10 @@ interface AppContextValue {
   /** The server's answer to a password: null when signed in, or the id of an SMS code challenge. */
   signInPassword: (staffId: string, password: string) => Promise<string | null>;
   capabilities: ApiCapabilities;
+  /** Who already holds these IDs, phone numbers or emails. Null when there is no connection to ask. */
+  checkMember: (lookup: MemberLookup) => Promise<MemberConflict[] | null>;
+  /** Where KYC pictures are kept on the phone until they are sent. */
+  files: FileStore;
   /** 'mock' means demo data: the app is not connected to the core system. */
   apiMode: 'http' | 'mock';
   signInOtp: (challengeId: string, otp: string) => Promise<void>;
@@ -87,6 +92,8 @@ export function AppProvider({ children }: { children: ReactNode }) {
   }, []);
 
   const touch = useCallback(() => setVersion((v) => v + 1), []);
+  // Where KYC pictures are kept on the phone until they are sent.
+  const files = useMemo(() => createFileStore(), []);
 
   useEffect(() => {
     let cancelled = false;
@@ -118,7 +125,7 @@ export function AppProvider({ children }: { children: ReactNode }) {
     if (!repos || !session) return null;
     setSyncing(true);
     try {
-      const report = await syncOnce({ repos, api, session, fullRefresh: options?.full });
+      const report = await syncOnce({ repos, api, session, fullRefresh: options?.full, files });
       setLastReport(report);
       if (!report.offline) setLastSyncAt(new Date().toISOString());
       if (report.authError) setStatus('signedOut');
@@ -127,7 +134,7 @@ export function AppProvider({ children }: { children: ReactNode }) {
     } finally {
       setSyncing(false);
     }
-  }, [repos, api, session, touch]);
+  }, [repos, api, session, touch, files]);
 
   // Automatic sync: when the app becomes ready, returns to the foreground, or the network returns.
   const syncRef = useRef(syncNow);
@@ -173,6 +180,18 @@ export function AppProvider({ children }: { children: ReactNode }) {
     [api],
   );
 
+  const checkMember = useCallback(
+    async (lookup: MemberLookup): Promise<MemberConflict[] | null> => {
+      if (!session || offlineRef.current) return null;
+      try {
+        return await api.checkMember(session, lookup);
+      } catch {
+        return null;
+      }
+    },
+    [api, session],
+  );
+
   const unlock = useCallback(async () => {
     const ok = await unlockWithDevice();
     if (ok) setStatus('ready');
@@ -213,6 +232,8 @@ export function AppProvider({ children }: { children: ReactNode }) {
     syncNow,
     signInPassword,
     capabilities: api.capabilities,
+    checkMember,
+    files,
     apiMode: API_MODE,
     signInOtp,
     unlock,
