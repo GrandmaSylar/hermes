@@ -19,6 +19,8 @@ export interface Schema {
   sms: boolean;
   /** Members can be registered: every table the registration writes to is visible to this login. */
   registration: boolean;
+  /** KYC files can be saved: the member media table is visible to this login. */
+  documents: boolean;
 }
 
 export const TABLES = [
@@ -43,6 +45,11 @@ export const TABLES = [
   'CustomerBeneficiary',
   'CustomerGuardian',
   'CustomerCompliance',
+  // KYC files
+  'CustomerMedia',
+  'CustomerDocuments',
+  'MemberAuthorizationProfile',
+  'MemberAuthorizationCredential',
 ] as const;
 
 const MIN_BASE = [
@@ -78,6 +85,9 @@ const MIN_REGISTRATION = [
   'CustomerAlertPreferences.CustomerID', 'CustomerGuardian.CustomerID', 'CustomerCompliance.CustomerID',
 ];
 
+/** What saving KYC files needs, on top of registration. The credential, profile and documents tables are used when present. */
+const MIN_DOCUMENTS = ['CustomerMedia.CustomerID', 'CustomerMedia.MainPicture', 'CustomerMedia.MainSignature', 'CustomerMedia.NationalIdentity', 'CustomerMedia.PictureTwo', 'CustomerMedia.CreatedAt'];
+
 const MIN_SMS = [
   'AppSettings.Key', 'AppSettings.Value',
   'SMSHistory.ID', 'SMSHistory.PhoneNumber', 'SMSHistory.Message', 'SMSHistory.MessageType', 'SMSHistory.Status', 'SMSHistory.ReferenceNo',
@@ -87,7 +97,7 @@ const MIN_SMS = [
 export class SchemaError extends Error {}
 
 /** Builds the schema from the columns found. Throws one clear error if the minimum is missing. */
-export function buildSchema(rows: ColumnRow[]): { schema: Schema; sharesMissing: string[]; smsMissing: string[]; registrationMissing: string[] } {
+export function buildSchema(rows: ColumnRow[]): { schema: Schema; sharesMissing: string[]; smsMissing: string[]; registrationMissing: string[]; documentsMissing: string[] } {
   const cols = new Set(rows.map((r) => `${r.table}.${r.column}`.toLowerCase()));
   const lacking = (list: string[]) => list.filter((c) => !cols.has(c.toLowerCase()));
 
@@ -103,11 +113,13 @@ export function buildSchema(rows: ColumnRow[]): { schema: Schema; sharesMissing:
   );
   if (!phone) smsMissing.push('a member phone column');
   const registrationMissing = lacking(MIN_REGISTRATION);
+  const documentsMissing = lacking(MIN_DOCUMENTS);
   return {
-    schema: { cols, shares: sharesMissing.length === 0, sms: smsMissing.length === 0, registration: registrationMissing.length === 0 },
+    schema: { cols, shares: sharesMissing.length === 0, sms: smsMissing.length === 0, registration: registrationMissing.length === 0, documents: registrationMissing.length === 0 && documentsMissing.length === 0 },
     sharesMissing,
     smsMissing,
     registrationMissing,
+    documentsMissing,
   };
 }
 
@@ -121,6 +133,7 @@ export function describe(s: Schema): Record<string, boolean> {
     sharesEnabled: s.shares,
     smsAvailable: s.sms,
     registrationEnabled: s.registration,
+    documentsEnabled: s.documents,
     savingsProductActiveRule: has(s, 'SavingsProduct.IsActive') && has(s, 'SavingsProduct.Code'),
     savingsMinDepositRule: has(s, 'SavingsProduct.MinimumDeposit') && has(s, 'SavingsProduct.Code'),
     savingsMaxDepositRule: has(s, 'SavingsProduct.MaximumDeposit') && has(s, 'SavingsProduct.Code'),

@@ -162,6 +162,77 @@ export function formatDisplayDate(iso: string): string {
   return b ? `${String(b.d).padStart(2, '0')}/${String(b.m).padStart(2, '0')}/${b.y}` : '';
 }
 
+// ---- KYC documents ------------------------------------------------------
+
+export type KycKind = 'passportPhoto' | 'idFront' | 'idBack' | 'proofOfAddress' | 'signature' | 'thumbprint';
+
+/** The same limit as the core app: 5 MB a file. */
+export const MAX_KYC_BYTES = 5 * 1024 * 1024;
+
+export interface KycSlot {
+  kind: KycKind;
+  label: string;
+  help: string;
+  /** Whether a PDF is accepted as well as a picture. */
+  pdf: boolean;
+}
+
+/** The files the core app's KYC step asks for an individual member, in its order. All are optional, as there. */
+export const KYC_SLOTS: KycSlot[] = [
+  { kind: 'passportPhoto', label: 'Passport photograph', help: 'A clear, passport-style photo of the member.', pdf: false },
+  { kind: 'idFront', label: 'ID card (front)', help: 'Front of the Ghana Card, voter ID, NHIS card or passport photo page.', pdf: true },
+  { kind: 'idBack', label: 'ID card (back)', help: 'Back of the ID card, if it has one.', pdf: true },
+  { kind: 'proofOfAddress', label: 'Proof of address', help: 'Utility bill, bank statement or rent agreement.', pdf: true },
+  { kind: 'signature', label: 'Signature sample', help: 'The member signing on plain paper.', pdf: false },
+  { kind: 'thumbprint', label: 'Thumbprint sample', help: "The member's thumbprint on plain paper.", pdf: false },
+];
+
+export const AUTHORIZATION_PREFERENCES = [
+  { value: 'SIGNATURE', label: 'Signature' },
+  { value: 'THUMBPRINT', label: 'Thumbprint' },
+  { value: 'BOTH', label: 'Both' },
+];
+
+/** A picture or PDF chosen for one slot, kept on the phone until it has been sent. */
+export interface KycFile {
+  kind: KycKind;
+  uri: string;
+  name: string;
+  mimeType: string;
+  size: number;
+}
+
+/** A KYC file saved with a registration, and how far it has got. */
+export interface RegistrationFile extends KycFile {
+  status: 'PENDING' | 'SENT' | 'REJECTED';
+  attempts: number;
+  lastError: string | null;
+}
+
+/** One line about how a registration's pictures are going, or null when it has none. */
+export function documentSummary(files: RegistrationFile[]): string | null {
+  if (files.length === 0) return null;
+  const sent = files.filter((f) => f.status === 'SENT').length;
+  const waiting = files.filter((f) => f.status === 'PENDING').length;
+  const refused = files.filter((f) => f.status === 'REJECTED').length;
+  const parts = [`${sent} of ${files.length} pictures sent`];
+  if (waiting > 0) parts.push(`${waiting} waiting`);
+  if (refused > 0) parts.push(`${refused} not accepted`);
+  return parts.join(', ');
+}
+
+/** The problem with a chosen file, in the core app's words, or null when it is acceptable. */
+export function kycFileProblem(file: KycFile): string | null {
+  const slot = KYC_SLOTS.find((s) => s.kind === file.kind);
+  if (!slot) return 'Unknown document.';
+  const allowed = slot.pdf ? ['image/jpeg', 'image/png', 'image/gif', 'application/pdf'] : ['image/jpeg', 'image/png', 'image/gif'];
+  if (!allowed.includes(file.mimeType.toLowerCase())) {
+    return `${slot.label} must be ${slot.pdf ? 'a JPG, PNG, GIF or PDF' : 'a JPG, PNG or GIF picture'}.`;
+  }
+  if (file.size > MAX_KYC_BYTES) return `${slot.label} is larger than 5 MB.`;
+  return null;
+}
+
 // ---- the form -----------------------------------------------------------
 
 export interface GuardianForm {
@@ -243,6 +314,9 @@ export interface RegistrationForm {
   sourceOfFunds: string;
   expectedTransactionVolume: string;
   politicallyExposed: boolean;
+  // KYC documents (all optional)
+  authorizationPreference: string;
+  documents: Partial<Record<KycKind, KycFile>>;
   // Beneficiaries and alerts
   beneficiaries: BeneficiaryForm[];
   alerts: AlertsForm;
@@ -262,6 +336,8 @@ export const EMPTY_FORM: RegistrationForm = {
   residentialAddress: '', addressLine1: '', addressLine2: '', addressLine3: '', landmark: '', gpsCoordinates: '', region: '', city: '',
   employerName: '', jobTitle: '', employmentType: '', yearsWithEmployer: '', employerAddress: '', employerContact: '', incomeSource: '',
   customerBank: '', customerBranch: '', bankAccountNo: '', sourceOfFunds: '', expectedTransactionVolume: '', politicallyExposed: false,
+  authorizationPreference: 'SIGNATURE',
+  documents: {},
   beneficiaries: [],
   alerts: { sms: true, email: true, transaction: true, loan: true, maturity: true, promotional: false },
 };
@@ -271,6 +347,7 @@ export const STEPS = [
   { id: 'contact', label: 'Contact information' },
   { id: 'employment', label: 'Employment details' },
   { id: 'financial', label: 'Financial details' },
+  { id: 'documents', label: 'KYC documents' },
   { id: 'beneficiaries', label: 'Beneficiaries' },
   { id: 'alerts', label: 'Alert preferences' },
   { id: 'preview', label: 'Preview and submit' },
@@ -340,6 +417,14 @@ export function validateStep(step: StepId, form: RegistrationForm, types: Member
   if (step === 'employment') {
     if (required(form.yearsWithEmployer) && !/^\d+(\.\d{1,2})?$/.test(form.yearsWithEmployer.trim())) {
       errors.push({ field: 'yearsWithEmployer', message: 'Years with Employer must be a number' });
+    }
+  }
+
+  if (step === 'documents') {
+    for (const slot of KYC_SLOTS) {
+      const file = form.documents[slot.kind];
+      const problem = file ? kycFileProblem(file) : null;
+      if (problem) errors.push({ field: `documents.${slot.kind}`, message: problem });
     }
   }
 
@@ -431,6 +516,7 @@ export interface RegistrationPayload {
     guardianName: string;
     guardianPhone: string;
   }[];
+  authorizationPreference: string;
   alerts: AlertsForm;
 }
 
@@ -495,6 +581,7 @@ export function toPayload(form: RegistrationForm, localRegistrationId: string, c
       guardianName: trim(b.guardianName),
       guardianPhone: trim(b.guardianPhone),
     })),
+    authorizationPreference: ['SIGNATURE', 'THUMBPRINT', 'BOTH'].includes(form.authorizationPreference) ? form.authorizationPreference : 'SIGNATURE',
     alerts: { ...form.alerts },
   };
 }
@@ -531,6 +618,8 @@ export interface RegistrationItem {
   createdAt: string;
   /** The whole form as sent to the server. Null for a registration saved by an older version of the app. */
   payload: RegistrationPayload | null;
+  /** The KYC files saved with it, and which have been delivered. */
+  files: RegistrationFile[];
 }
 
 export const fullName = (r: Pick<RegistrationItem, 'firstName' | 'lastName'>) => `${r.firstName} ${r.lastName}`;

@@ -19,6 +19,7 @@ const item = (id: string, payload: RegistrationPayload | null) => ({
   capturedAt: '2026-11-25T11:00:00.000Z',
   createdAt: '2026-11-25T11:00:00.000Z',
   payload,
+  files: [] as ReturnType<typeof picture>[],
 });
 
 const make = (form = validForm()) =>
@@ -29,6 +30,49 @@ async function fresh() {
   await migrate(db);
   return { db, repos: createSqliteRepos(db) };
 }
+
+const picture = (kind: 'passportPhoto' | 'signature') => ({ kind, uri: `file:///kyc/${kind}.jpg`, name: `${kind}.jpg`, mimeType: 'image/jpeg', size: 1234 });
+
+describe('registration pictures on SQLite', () => {
+  test('are saved with the registration and come back with it', async () => {
+    const { repos } = await fresh();
+    await repos.registrations.enqueue({ ...item('reg-1', make()), files: [picture('passportPhoto'), picture('signature')] });
+    const [saved] = await repos.registrations.list(10);
+    expect(saved.files.map((f) => [f.kind, f.status, f.size])).toEqual([['passportPhoto', 'PENDING', 1234], ['signature', 'PENDING', 1234]]);
+    expect((await repos.registrations.forDay('2026-11-25'))[0].files).toHaveLength(2);
+  });
+
+  test('are only offered for sending once the member has a number, and each is marked as it goes', async () => {
+    const { repos } = await fresh();
+    await repos.registrations.enqueue({ ...item('reg-1', make()), files: [picture('passportPhoto'), picture('signature')] });
+    expect(await repos.registrations.filesToSend(10)).toEqual([]);
+    await repos.registrations.applyResult('reg-1', 'SYNCED', { serverId: '1000004770' });
+    const due = await repos.registrations.filesToSend(10);
+    expect(due.map((f) => [f.kind, f.memberCode, f.localRegistrationId])).toEqual([['passportPhoto', '1000004770', 'reg-1'], ['signature', '1000004770', 'reg-1']]);
+    await repos.registrations.applyFileResult('reg-1', 'passportPhoto', 'SENT');
+    await repos.registrations.applyFileResult('reg-1', 'signature', 'REJECTED', 'Signature must be a picture.');
+    expect(await repos.registrations.filesToSend(10)).toEqual([]);
+    const [saved] = await repos.registrations.list(10);
+    expect(saved.files.map((f) => [f.status, f.attempts, f.lastError])).toEqual([['SENT', 1, null], ['REJECTED', 1, 'Signature must be a picture.']]);
+  });
+
+  test('of a registration that will not be delivered are given back for deleting', async () => {
+    const { repos } = await fresh();
+    await repos.registrations.enqueue({ ...item('reg-1', make()), files: [picture('passportPhoto')] });
+    const gone = await repos.registrations.abandonFiles('reg-1', 'The registration was refused.');
+    expect(gone.map((f) => f.uri)).toEqual(['file:///kyc/passportPhoto.jpg']);
+    expect((await repos.registrations.list(10))[0].files[0]).toMatchObject({ status: 'REJECTED', lastError: 'The registration was refused.' });
+    expect(await repos.registrations.abandonFiles('reg-1', 'again')).toEqual([]);
+  });
+
+  test('a registration saved twice keeps one set of pictures', async () => {
+    const { repos } = await fresh();
+    const twice = { ...item('reg-1', make()), files: [picture('signature')] };
+    await repos.registrations.enqueue(twice);
+    await repos.registrations.enqueue(twice);
+    expect((await repos.registrations.list(10))[0].files).toHaveLength(1);
+  });
+});
 
 describe('registrations on SQLite', () => {
   test('the whole form survives being stored, and older rows read back with no form', async () => {
@@ -90,6 +134,6 @@ describe('registrations on SQLite', () => {
     await migrate(db);
     const [old] = await createSqliteRepos(db).registrations.list(10);
     expect(old).toMatchObject({ localRegistrationId: 'r0', firstName: 'Ama', payload: null });
-    expect(await db.getFirstAsync('PRAGMA user_version')).toEqual({ user_version: 6 });
+    expect(await db.getFirstAsync('PRAGMA user_version')).toEqual({ user_version: 7 });
   });
 });

@@ -114,6 +114,9 @@ export async function findEarlierRegistration(
   return r.recordset[0] ? String(r.recordset[0].Code) : null;
 }
 
+/** What is written to CreatedBy for a member this banker registers, and how their own members are recognised later. */
+export const createdByOf = (officer: Officer): string => officer.staffId || officer.fullName || 'field-server';
+
 const yn = (v: boolean) => (v ? 1 : 0);
 const orNull = (v: string): string | null => (v.trim() === '' ? null : v.trim());
 
@@ -151,7 +154,7 @@ export async function registerMember(
     const fullName = [body.firstName, body.middleName, body.lastName].map((p) => p.trim()).filter(Boolean).join(' ');
     const ids = { nationalId: body.nationalId, voterIdNo: body.voterIdNo, nhisNo: body.nhisNo, passportNo: body.passportNo };
     const idType = primaryIdType(ids);
-    const created = officer.staffId || officer.fullName || 'field-server';
+    const created = createdByOf(officer);
 
     // Customer: the columns the core app writes, plus branch, full name and phone.
     const cols: [string, string, unknown, sql.ISqlTypeFactoryWithNoParams | sql.ISqlType][] = [
@@ -306,6 +309,18 @@ export async function registerMember(
         `INSERT INTO dbo.CustomerCompliance (CustomerID, PEPStatus, SanctionsCheck, SanctionsStatus, KYCVerified, KYCStatus, AMLCompliant, AMLRiskScore, RiskRating, RiskAssessment, ComplianceNotes, CreatedAt)
          VALUES (@cid, @pep, 0, NULL, 0, 'Pending', 0, 0, 'Low', NULL, NULL, GETUTCDATE())`,
       );
+
+    // How the member will authorise withdrawals (signature, thumbprint or both), as the core app records it.
+    if (has(schema, 'MemberAuthorizationProfile.PreferredAuthorizationMode')) {
+      await child()
+        .input('code', sql.NVarChar(50), code)
+        .input('mode', sql.NVarChar(20), body.authorizationPreference)
+        .input('by', sql.NVarChar(100), created.slice(0, 100))
+        .query(
+          `INSERT INTO dbo.MemberAuthorizationProfile (CustomerID, CustomerCode, PreferredAuthorizationMode, AllowFallbackUpload, DeviceCaptureRequired, Status, CreatedBy, RecordRemarks)
+           VALUES (@cid, @code, @mode, 1, 0, 'ACTIVE', @by, 'Saved during member onboarding (field app)')`,
+        );
+    }
 
     await tx.commit();
     return { memberCode: code };

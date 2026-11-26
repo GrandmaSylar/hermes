@@ -282,6 +282,7 @@ describe('core system limits', () => {
       capturedAt: new Date().toISOString(),
       createdAt: new Date().toISOString(),
       payload: null,
+      files: [],
     });
     const limited = Object.create(api) as typeof api;
     Object.defineProperty(limited, 'capabilities', { value: { ...api.capabilities, registration: false } });

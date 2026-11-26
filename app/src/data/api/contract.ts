@@ -125,6 +125,18 @@ export interface OfficeDecision {
   reason: string | null;
 }
 
+/** One KYC file sent for a member, and what the server said. */
+export interface DocumentUpload {
+  kind: string;
+  fileName: string;
+  dataBase64: string;
+}
+
+export interface DocumentResult {
+  status: 'SAVED' | 'REJECTED' | 'CONFLICT';
+  reason?: string;
+}
+
 export interface ApiCapabilities {
   /** The server can say what the office decided about each collection. */
   officeDecisions: boolean;
@@ -132,6 +144,8 @@ export interface ApiCapabilities {
   otp: boolean;
   /** New members can be registered from the field. */
   registration: boolean;
+  /** KYC pictures can be sent for a registered member. */
+  documents: boolean;
   /** Mobile Money can be offered as a payment mode. Off until the core can record it as such. */
   mobileMoney: boolean;
   shareContribution: boolean;
@@ -158,6 +172,8 @@ export interface ApiClient {
   pullSavingsAccounts(session: Session, cursor: string | null): Promise<SavingsAccountPage>;
   pushTransactions(session: Session, items: PushItem[]): Promise<PushResult[]>;
   pushRegistrations(session: Session, items: PushRegistration[]): Promise<RegistrationResult[]>;
+  /** Sends one KYC picture for a member this banker registered. A refusal comes back as a result; network and server trouble throw. */
+  uploadDocument(session: Session, memberCode: string, upload: DocumentUpload): Promise<DocumentResult>;
   /** The member types the registration form offers. */
   memberTypes(session: Session): Promise<MemberTypeOption[]>;
   /** Who already holds these IDs, phone numbers or email addresses. Needs a connection. */

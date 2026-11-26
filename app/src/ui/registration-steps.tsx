@@ -1,11 +1,14 @@
 import { useMemo, useState } from 'react';
-import { Pressable, Text, View } from 'react-native';
+import { ActivityIndicator, Image, Pressable, Text, View } from 'react-native';
+import { captureKycFile, type CaptureSource } from '@/data/kyc-capture';
 import { citiesForRegion, REGIONS } from '@/domain/ghana-locations';
 import {
+  AUTHORIZATION_PREFERENCES,
   BENEFICIARY_RELATIONSHIPS,
   EMPLOYMENT_TYPES,
   EMPTY_BENEFICIARY,
   ID_TYPES,
+  KYC_SLOTS,
   MARITAL_STATUSES,
   MISSING_ID_MESSAGE,
   SEXES,
@@ -21,6 +24,8 @@ import {
   remainingPercentage,
   type BeneficiaryForm,
   type FormProblem,
+  type KycKind,
+  type KycSlot,
   type MemberTypeOption,
   type RegistrationForm,
 } from '@/domain/registration';
@@ -32,6 +37,101 @@ export interface StepProps {
   set: <K extends keyof RegistrationForm>(key: K, value: RegistrationForm[K]) => void;
   /** The message for one field, when the step was checked and it is wrong. */
   errorFor: (field: string) => string | null;
+}
+
+// ---- documents (KYC) -----------------------------------------------------------
+
+const kb = (bytes: number) => (bytes >= 1024 * 1024 ? `${(bytes / (1024 * 1024)).toFixed(1)} MB` : `${Math.max(1, Math.round(bytes / 1024))} KB`);
+
+const pill = { minHeight: 44, paddingHorizontal: 14, borderRadius: 10, borderWidth: 1, borderColor: colors.border, justifyContent: 'center' as const, backgroundColor: colors.card };
+const pillText = { color: colors.primary, fontWeight: '600' as const };
+
+function DocumentSlot({ slot, form, set, error }: { slot: KycSlot; form: RegistrationForm; set: StepProps['set']; error: string | null }) {
+  const file = form.documents[slot.kind];
+  const [busy, setBusy] = useState(false);
+  const [problem, setProblem] = useState<string | null>(null);
+
+  const pick = async (source: CaptureSource) => {
+    setBusy(true);
+    setProblem(null);
+    const result = await captureKycFile(slot.kind, source);
+    setBusy(false);
+    if ('file' in result) set('documents', { ...form.documents, [slot.kind]: result.file });
+    else if ('error' in result) setProblem(result.error);
+  };
+  const remove = () => {
+    const next = { ...form.documents };
+    delete next[slot.kind as KycKind];
+    set('documents', next);
+  };
+  const shown = problem ?? error;
+
+  return (
+    <Card>
+      <Text style={{ fontSize: 15, fontWeight: '700', color: colors.text }}>{slot.label}</Text>
+      <Text style={{ fontSize: 12, color: colors.muted, marginTop: 2 }}>{slot.help}</Text>
+      {file ? (
+        <View style={{ flexDirection: 'row', alignItems: 'center', gap: 12, marginTop: 12 }}>
+          {file.mimeType === 'application/pdf' ? (
+            <View style={{ width: 64, height: 64, borderRadius: 8, backgroundColor: colors.border, alignItems: 'center', justifyContent: 'center' }}>
+              <Text style={{ fontWeight: '700', color: colors.muted }}>PDF</Text>
+            </View>
+          ) : (
+            <Image source={{ uri: file.uri }} style={{ width: 64, height: 64, borderRadius: 8, backgroundColor: colors.border }} />
+          )}
+          <View style={{ flex: 1 }}>
+            <Text numberOfLines={1} style={{ color: colors.text }}>{file.name}</Text>
+            <Text style={{ color: colors.muted, fontSize: 12 }}>{kb(file.size)} - ready to send</Text>
+          </View>
+          <Pressable accessibilityRole="button" accessibilityLabel={`Remove ${slot.label}`} onPress={remove} style={{ padding: 8 }}>
+            <Text style={{ color: colors.danger, fontWeight: '600' }}>Remove</Text>
+          </Pressable>
+        </View>
+      ) : null}
+      <View style={{ flexDirection: 'row', flexWrap: 'wrap', gap: 8, marginTop: 12 }}>
+        {busy ? (
+          <ActivityIndicator />
+        ) : (
+          <>
+            <Pressable accessibilityRole="button" onPress={() => void pick('camera')} style={pill}>
+              <Text style={pillText}>{file ? 'Retake' : 'Take photo'}</Text>
+            </Pressable>
+            <Pressable accessibilityRole="button" onPress={() => void pick('library')} style={pill}>
+              <Text style={pillText}>Choose photo</Text>
+            </Pressable>
+            {slot.pdf ? (
+              <Pressable accessibilityRole="button" onPress={() => void pick('file')} style={pill}>
+                <Text style={pillText}>Choose PDF</Text>
+              </Pressable>
+            ) : null}
+          </>
+        )}
+      </View>
+      {shown ? <Text style={{ color: colors.danger, fontSize: 13, marginTop: 8 }}>{shown}</Text> : null}
+    </Card>
+  );
+}
+
+export function DocumentsStep({ form, set, errorFor }: StepProps) {
+  return (
+    <View style={{ gap: 12 }}>
+      <NoticeBox tone="info">
+        Pictures are optional but speed up approval. They are kept on this phone until the office has them, then deleted from it.
+      </NoticeBox>
+      <Card>
+        <ChoiceField
+          label="Preferred authorization"
+          value={form.authorizationPreference}
+          options={AUTHORIZATION_PREFERENCES}
+          onChange={(v) => set('authorizationPreference', v)}
+        />
+        <Text style={{ fontSize: 12, color: colors.muted, marginTop: -6 }}>How the member will authorise withdrawals.</Text>
+      </Card>
+      {KYC_SLOTS.map((slot) => (
+        <DocumentSlot key={slot.kind} slot={slot} form={form} set={set} error={errorFor(`documents.${slot.kind}`)} />
+      ))}
+    </View>
+  );
 }
 
 // ---- 1. personal information -------------------------------------------------
@@ -409,13 +509,19 @@ export function PreviewStep(props: { form: RegistrationForm; types: MemberTypeOp
         <Row label="Expected volume" value={f.expectedTransactionVolume} />
         <Row label="PEP" value={yes(f.politicallyExposed)} />
       </Section>
-      <Section title="Beneficiaries" onEdit={() => props.goTo(4)}>
+      <Section title="KYC documents" onEdit={() => props.goTo(4)}>
+        <Row label="Authorization" value={AUTHORIZATION_PREFERENCES.find((p) => p.value === f.authorizationPreference)?.label ?? ''} />
+        {KYC_SLOTS.map((slot) => (
+          <Row key={slot.kind} label={slot.label} value={f.documents[slot.kind] ? 'Attached' : 'Not added'} />
+        ))}
+      </Section>
+      <Section title="Beneficiaries" onEdit={() => props.goTo(5)}>
         {f.beneficiaries.map((b, i) => (
           <Row key={i} label={`${b.percentage}%`} value={`${b.name} (${b.relationship})`} />
         ))}
         <Row label="Total" value={`${beneficiaryTotal(f.beneficiaries)}%`} />
       </Section>
-      <Section title="Alert preferences" onEdit={() => props.goTo(5)}>
+      <Section title="Alert preferences" onEdit={() => props.goTo(6)}>
         <Row label="SMS / Email" value={`${yes(f.alerts.sms)} / ${yes(f.alerts.email)}`} />
         <Row label="Transactions" value={yes(f.alerts.transaction)} />
         <Row label="Loans" value={yes(f.alerts.loan)} />

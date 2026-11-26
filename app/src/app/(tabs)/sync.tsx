@@ -2,7 +2,7 @@ import { useEffect, useState } from 'react';
 import { Alert, FlatList, Switch, Text, View } from 'react-native';
 import { formatAmount } from '@/domain/money';
 import { officeLine } from '@/domain/office';
-import { fullName, type RegistrationItem } from '@/domain/registration';
+import { documentSummary, fullName, type RegistrationItem } from '@/domain/registration';
 import { PRODUCT_LABELS, type OutboxItem } from '@/domain/types';
 import { useApp } from '@/state/AppProvider';
 import { Button, Card, StatusPill, colors } from '@/ui/theme';
@@ -89,6 +89,10 @@ export default function SyncTab() {
                   <View style={{ height: 8 }} />
                   <StatusPill status={r.status} />
                   {r.serverId ? <Text style={{ color: colors.muted, fontSize: 12, marginTop: 6 }}>Member number {r.serverId} (pending approval)</Text> : null}
+                  {documentSummary(r.files) ? <Text style={{ color: colors.muted, fontSize: 12, marginTop: 4 }}>{documentSummary(r.files)}</Text> : null}
+                  {r.files.filter((f) => f.status === 'REJECTED' && f.lastError).map((f) => (
+                    <Text key={f.kind} style={{ color: colors.danger, fontSize: 12, marginTop: 4 }}>{f.lastError}</Text>
+                  ))}
                   {r.lastError ? <Text style={{ color: colors.danger, marginTop: 6 }}>{r.lastError}</Text> : null}
                 </Card>
               ))}

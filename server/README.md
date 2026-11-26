@@ -95,11 +95,17 @@ Port 80 and 443 are then taken, so skip Caddy. Use `deploy/docker-compose.behind
 
 Bankers can register new individual members from the phone. The rules are copied from the core app's registration form (required fields, the four ID types with their formats, the guardian rule for under-18s and Kiddy Savings, beneficiaries totalling 100%, duplicate ID, phone and email checks), and the member is saved as pending (`StatusCode = 'PND'`) into `Customer`, `CustomerContact`, `CustomerAddress`, `CustomerEmployment`, `CustomerFinancial`, `CustomerBeneficiary`, `CustomerAlertPreferences`, `CustomerGuardian` and `CustomerCompliance` in one transaction. The office approves them as it does any other new member.
 
-It is off until the server's database login can see those tables. Run `deploy/grant-registration.sql` (INSERT and SELECT only, no UPDATE or DELETE), then restart the server: `GET /health` shows `registrationEnabled: true` and `GET /v1/me` tells the app it may offer registration.
+It is off until the server's database login can see those tables. Run `deploy/grant-registration.sql` (SELECT and INSERT on the member tables, plus UPDATE on the three media tables for KYC pictures; never DELETE, and never UPDATE on `Customer`), then restart the server: `GET /health` shows `registrationEnabled: true` and `GET /v1/me` tells the app it may offer registration.
 
 Where it differs from the office app: the new member also gets the banker's branch, a full name and the phone number, so the field app can list them straight away (the office app leaves branch and full name empty). A registration sent twice by the same banker for the same person returns the same member instead of creating a second one.
 
 Routes: `GET /v1/member-types`, `POST /v1/members/check` (who already holds an ID, phone or email) and `POST /v1/registrations`.
+
+#### KYC pictures
+
+The core app's KYC step is copied too: passport photo, ID card front and back, proof of address, signature and thumbprint, each optional, up to 5 MB, pictures for photo/signature/thumbprint and a picture or PDF for the ID card and proof of address. The phone sends each picture after the member is saved, to `POST /v1/members/:code/documents` (`{ kind, fileName, dataBase64 }`). The server checks the file's real type from its first bytes, and only accepts a picture for a member that is still pending and that the same banker registered. Sending the same kind again replaces it. They are stored where the core app keeps them: `CustomerMedia` (`MainPicture`, `NationalIdentity`, `PictureTwo`, `MainSignature`), `MemberAuthorizationCredential` (`FACE_PHOTO`, `SIGNATURE`, `THUMBPRINT`) and `MemberAuthorizationProfile` (the signature / thumbprint / both choice). The core app drops the back of the ID card; here it is kept in `CustomerDocuments` as `NATIONAL_ID_BACK`.
+
+`GET /v1/me` reports `capabilities.documents`; it is on when `CustomerMedia` is visible too (`documentsEnabled` under `/health`).
 
 ### Without Docker (pm2)
 

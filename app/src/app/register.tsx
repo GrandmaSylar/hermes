@@ -27,6 +27,7 @@ import {
   AlertsStep,
   BeneficiariesStep,
   ContactStep,
+  DocumentsStep,
   EmploymentStep,
   FinancialStep,
   PersonalStep,
@@ -44,7 +45,7 @@ function conflictText(c: MemberConflict): string {
 }
 
 export default function RegisterScreen() {
-  const { repos, session, newId, touch, syncNow, checkMember } = useApp();
+  const { repos, session, newId, touch, syncNow, checkMember, files } = useApp();
   const [form, setForm] = useState<RegistrationForm>(EMPTY_FORM);
   const [dobText, setDobText] = useState('');
   const [step, setStep] = useState(0);
@@ -170,7 +171,7 @@ export default function RegisterScreen() {
         return;
       }
 
-      const result = await registerMember(repos, session, form, types, newId);
+      const result = await registerMember(repos, session, form, types, newId, undefined, files);
       if (!result.ok) {
         const at = STEPS.findIndex((s) => s.id === result.step);
         if (at >= 0) setStep(at);
@@ -239,6 +240,7 @@ export default function RegisterScreen() {
         {stepId === 'contact' ? <ContactStep {...stepProps} notices={notices(['Phone', 'Email'])} /> : null}
         {stepId === 'employment' ? <EmploymentStep {...stepProps} /> : null}
         {stepId === 'financial' ? <FinancialStep {...stepProps} /> : null}
+        {stepId === 'documents' ? <DocumentsStep {...stepProps} /> : null}
         {stepId === 'beneficiaries' ? <BeneficiariesStep {...stepProps} /> : null}
         {stepId === 'alerts' ? <AlertsStep {...stepProps} /> : null}
         {stepId === 'preview' ? <PreviewStep form={form} types={types} branchCode={branchCode} guardianNeeded={guardianNeeded} goTo={goTo} /> : null}

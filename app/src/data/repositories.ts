@@ -1,7 +1,7 @@
 import type { OfficeDecision, SavingsAccountInfo, ServerMember } from './api/contract';
 import type { Member, OutboxItem, OutboxStatus } from '@/domain/types';
 import type { UnsyncedTotals } from '@/domain/capture';
-import type { RegistrationItem } from '@/domain/registration';
+import type { RegistrationItem, KycFile, KycKind, RegistrationFile } from '@/domain/registration';
 
 /**
  * Storage interfaces. The app uses the SQLite (SQLCipher) implementation; the
@@ -58,7 +58,16 @@ export interface OutboxRepo {
   applyOfficeDecisions(decisions: OfficeDecision[]): Promise<number>;
 }
 
-export type NewRegistration = Omit<RegistrationItem, 'status' | 'attempts' | 'lastError' | 'serverId'>;
+export type NewRegistration = Omit<RegistrationItem, 'status' | 'attempts' | 'lastError' | 'serverId' | 'files'> & {
+  /** The KYC files already copied into the app's own storage. */
+  files: KycFile[];
+};
+
+/** A KYC file waiting to be sent, with the new member's number it belongs to. */
+export interface FileToSend extends RegistrationFile {
+  localRegistrationId: string;
+  memberCode: string;
+}
 
 /** Registrations follow the same outbox life cycle as collections. */
 export interface RegistrationRepo {
@@ -79,6 +88,12 @@ export interface RegistrationRepo {
   hasIdNumber(idNumber: string): Promise<boolean>;
   /** Registrations captured within a UTC day, "YYYY-MM-DD". */
   forDay(day: string): Promise<RegistrationItem[]>;
+  /** Files not yet delivered, for registrations the core system has received (so the member's number is known). */
+  filesToSend(limit: number): Promise<FileToSend[]>;
+  /** Records what happened to one file. Delivered and refused files count as done. */
+  applyFileResult(localRegistrationId: string, kind: KycKind, status: 'SENT' | 'REJECTED', lastError?: string | null): Promise<void>;
+  /** A registration that will never be delivered: its files will not be sent either. Returns them so they can be deleted. */
+  abandonFiles(localRegistrationId: string, reason: string): Promise<RegistrationFile[]>;
 }
 
 export interface KvRepo {

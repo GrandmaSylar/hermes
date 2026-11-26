@@ -119,6 +119,7 @@ describe('member registration', () => {
       capturedAt: NOW.toISOString(),
       createdAt: NOW.toISOString(),
       payload: null,
+      files: [],
     });
     const report = await syncOnce({ repos, api, session });
     expect(report.registrationsRejected).toBe(1);

@@ -38,6 +38,13 @@
       ],
       "expo-secure-store",
       [
+        "expo-image-picker",
+        {
+          "cameraPermission": "Allow QSS Mobile Banking to take the member's photo, ID card and signature for KYC.",
+          "photosPermission": "Allow QSS Mobile Banking to choose KYC pictures from your photos."
+        }
+      ],
+      [
         "expo-local-authentication",
         {
           "faceIDPermission": "Allow QSS Mobile Banking to use Face ID to unlock the app."

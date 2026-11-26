@@ -1,4 +1,7 @@
 import {
+  KYC_SLOTS,
+  documentSummary,
+  kycFileProblem,
   DEFAULT_MEMBER_TYPES,
   EMPTY_FORM,
   STEPS,
@@ -91,7 +94,7 @@ describe('registration rules (the same as the office form)', () => {
     expect(personal.step).toBe('personal');
     expect(personal.problems[0]).toEqual({ field: 'firstName', message: 'First Name is required' });
     expect(validateStep('employment', validForm({ yearsWithEmployer: 'x' }), types, today)[0].field).toBe('yearsWithEmployer');
-    expect(STEPS).toHaveLength(7);
+    expect(STEPS).toHaveLength(8);
   });
 });
 
@@ -139,5 +142,39 @@ describe('what is sent', () => {
     const p = toPayload(validForm({ nationalId: '', passportNo: 'g1234567' }), 'r', 's', types, today);
     expect(primaryId(p)).toMatchObject({ value: 'G1234567', type: { idType: 'PASSPORT' } });
     expect(primaryId(toPayload(validForm(), 'r', 's', types, today))?.type.idType).toBe('NATIONAL_ID');
+  });
+});
+
+describe('KYC documents', () => {
+  const file = (kind: Parameters<typeof kycFileProblem>[0]['kind'], mimeType = 'image/jpeg', size = 1000) => ({ kind, uri: 'x', name: 'x', mimeType, size });
+
+  test('are the six the office form asks for, in its order, and all optional', () => {
+    expect(KYC_SLOTS.map((s) => s.kind)).toEqual(['passportPhoto', 'idFront', 'idBack', 'proofOfAddress', 'signature', 'thumbprint']);
+    expect(validateStep('documents', validForm(), types, today)).toEqual([]);
+  });
+
+  test('a photo, signature or thumbprint is a picture; an ID card or proof of address may be a PDF', () => {
+    expect(kycFileProblem(file('passportPhoto'))).toBeNull();
+    expect(kycFileProblem(file('passportPhoto', 'application/pdf'))).toBe('Passport photograph must be a JPG, PNG or GIF picture.');
+    expect(kycFileProblem(file('idFront', 'application/pdf'))).toBeNull();
+    expect(kycFileProblem(file('proofOfAddress', 'application/pdf'))).toBeNull();
+    expect(kycFileProblem(file('signature', 'text/plain'))).toBe('Signature sample must be a JPG, PNG or GIF picture.');
+  });
+
+  test('a file over 5 MB stops the step and names the field', () => {
+    const big = validForm({ documents: { thumbprint: file('thumbprint', 'image/png', 5 * 1024 * 1024 + 1) } });
+    expect(validateStep('documents', big, types, today)).toEqual([{ field: 'documents.thumbprint', message: 'Thumbprint sample is larger than 5 MB.' }]);
+  });
+
+  test('the authorization choice is sent, and an unknown one becomes signature', () => {
+    expect(toPayload(validForm({ authorizationPreference: 'BOTH' }), 'r', 's', types, today).authorizationPreference).toBe('BOTH');
+    expect(toPayload(validForm({ authorizationPreference: 'nonsense' }), 'r', 's', types, today).authorizationPreference).toBe('SIGNATURE');
+  });
+
+  test('how the pictures are going is one line', () => {
+    const f = (status: 'PENDING' | 'SENT' | 'REJECTED') => ({ ...file('signature'), status, attempts: 0, lastError: null });
+    expect(documentSummary([])).toBeNull();
+    expect(documentSummary([f('SENT'), f('SENT')])).toBe('2 of 2 pictures sent');
+    expect(documentSummary([f('SENT'), f('PENDING'), f('REJECTED')])).toBe('1 of 3 pictures sent, 1 waiting, 1 not accepted');
   });
 });

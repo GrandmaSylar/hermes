@@ -1,6 +1,7 @@
 import type * as SQLite from 'expo-sqlite';
 import type { OfficeDecision, SavingsAccountInfo, ServerMember } from '@/data/api/contract';
 import type {
+  FileToSend,
   KvRepo,
   MemberRepo,
   NewOutboxItem,
@@ -10,7 +11,7 @@ import type {
   Repos,
 } from '@/data/repositories';
 import type { UnsyncedTotals } from '@/domain/capture';
-import type { RegistrationItem } from '@/domain/registration';
+import type { RegistrationFile, RegistrationItem } from '@/domain/registration';
 import { queryWords } from '@/domain/member-search';
 import { toMinor } from '@/domain/money';
 import type { AccountOption, Member, MemberAccounts, OfficeStatus, OutboxItem, OutboxStatus, PaymentMode, ProductType } from '@/domain/types';
@@ -435,7 +436,30 @@ interface RegistrationRow {
   payload: string | null;
 }
 
-const toRegistration = (row: RegistrationRow): RegistrationItem => ({
+interface FileRow {
+  local_reg_id: string;
+  kind: RegistrationFile['kind'];
+  uri: string;
+  name: string;
+  mime_type: string;
+  size: number;
+  status: RegistrationFile['status'];
+  attempts: number;
+  last_error: string | null;
+}
+
+const toFile = (row: FileRow): RegistrationFile => ({
+  kind: row.kind,
+  uri: row.uri,
+  name: row.name,
+  mimeType: row.mime_type,
+  size: row.size,
+  status: row.status,
+  attempts: row.attempts,
+  lastError: row.last_error,
+});
+
+const toRegistration = (row: RegistrationRow, files: RegistrationFile[] = []): RegistrationItem => ({
   localRegistrationId: row.local_reg_id,
   firstName: row.first_name,
   lastName: row.last_name,
@@ -452,6 +476,7 @@ const toRegistration = (row: RegistrationRow): RegistrationItem => ({
   serverId: row.server_id,
   createdAt: row.created_at,
   payload: parsePayload(row.payload),
+  files,
 });
 
 /** The ID numbers a saved registration holds for the member themselves. */
@@ -474,24 +499,80 @@ class SqliteRegistrationRepo implements RegistrationRepo {
 
   async enqueue(item: NewRegistration): Promise<void> {
     // INSERT OR IGNORE on the primary key makes a double tap harmless.
-    await this.db.runAsync(
-      `INSERT OR IGNORE INTO registrations
-       (local_reg_id, first_name, last_name, gender, date_of_birth, phone, id_type, id_number, address,
-        captured_at, status, attempts, created_at, payload)
-       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'PENDING', 0, ?, ?)`,
-      item.localRegistrationId,
-      item.firstName,
-      item.lastName,
-      item.gender,
-      item.dateOfBirth,
-      item.phone,
-      item.idType,
-      item.idNumber,
-      item.address,
-      item.capturedAt,
-      item.createdAt,
-      item.payload ? JSON.stringify(item.payload) : null,
+    // The registration and its files are saved together, or not at all.
+    await this.db.withTransactionAsync(async () => {
+      const result = await this.db.runAsync(
+        `INSERT OR IGNORE INTO registrations
+         (local_reg_id, first_name, last_name, gender, date_of_birth, phone, id_type, id_number, address,
+          captured_at, status, attempts, created_at, payload)
+         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'PENDING', 0, ?, ?)`,
+        item.localRegistrationId,
+        item.firstName,
+        item.lastName,
+        item.gender,
+        item.dateOfBirth,
+        item.phone,
+        item.idType,
+        item.idNumber,
+        item.address,
+        item.capturedAt,
+        item.createdAt,
+        item.payload ? JSON.stringify(item.payload) : null,
+      );
+      if (result.changes === 0) return;
+      for (const f of item.files) {
+        await this.db.runAsync(
+          `INSERT OR IGNORE INTO registration_files (local_reg_id, kind, uri, name, mime_type, size, status, attempts)
+           VALUES (?, ?, ?, ?, ?, ?, 'PENDING', 0)`,
+          item.localRegistrationId,
+          f.kind,
+          f.uri,
+          f.name,
+          f.mimeType,
+          f.size,
+        );
+      }
+    });
+  }
+
+  /** The files of these registrations, grouped by registration. */
+  private async withFiles(rows: RegistrationRow[]): Promise<RegistrationItem[]> {
+    if (rows.length === 0) return [];
+    const marks = rows.map(() => '?').join(', ');
+    const files = await this.db.getAllAsync<FileRow>(
+      `SELECT * FROM registration_files WHERE local_reg_id IN (${marks}) ORDER BY rowid`,
+      ...rows.map((r) => r.local_reg_id),
     );
+    const byId = new Map<string, RegistrationFile[]>();
+    for (const f of files) byId.set(f.local_reg_id, [...(byId.get(f.local_reg_id) ?? []), toFile(f)]);
+    return rows.map((r) => toRegistration(r, byId.get(r.local_reg_id) ?? []));
+  }
+
+  async filesToSend(limit: number): Promise<FileToSend[]> {
+    const rows = await this.db.getAllAsync<FileRow & { server_id: string }>(
+      `SELECT f.*, r.server_id AS server_id FROM registration_files f
+       JOIN registrations r ON r.local_reg_id = f.local_reg_id
+       WHERE f.status = 'PENDING' AND r.status = 'SYNCED' AND r.server_id IS NOT NULL AND r.server_id <> ''
+       ORDER BY r.created_at ASC, f.rowid ASC LIMIT ?`,
+      limit,
+    );
+    return rows.map((r) => ({ ...toFile(r), localRegistrationId: r.local_reg_id, memberCode: r.server_id }));
+  }
+
+  async applyFileResult(id: string, kind: RegistrationFile['kind'], status: 'SENT' | 'REJECTED', lastError?: string | null): Promise<void> {
+    await this.db.runAsync(
+      'UPDATE registration_files SET status = ?, attempts = attempts + 1, last_error = ? WHERE local_reg_id = ? AND kind = ?',
+      status,
+      lastError ?? null,
+      id,
+      kind,
+    );
+  }
+
+  async abandonFiles(id: string, reason: string): Promise<RegistrationFile[]> {
+    const rows = await this.db.getAllAsync<FileRow>("SELECT * FROM registration_files WHERE local_reg_id = ? AND status = 'PENDING'", id);
+    await this.db.runAsync("UPDATE registration_files SET status = 'REJECTED', last_error = ? WHERE local_reg_id = ? AND status = 'PENDING'", reason, id);
+    return rows.map(toFile);
   }
 
   async list(limit: number): Promise<RegistrationItem[]> {
@@ -499,7 +580,7 @@ class SqliteRegistrationRepo implements RegistrationRepo {
       'SELECT * FROM registrations ORDER BY created_at DESC LIMIT ?',
       limit,
     );
-    return rows.map(toRegistration);
+    return this.withFiles(rows);
   }
 
   async due(limit: number): Promise<RegistrationItem[]> {
@@ -507,7 +588,7 @@ class SqliteRegistrationRepo implements RegistrationRepo {
       "SELECT * FROM registrations WHERE status = 'PENDING' ORDER BY created_at ASC LIMIT ?",
       limit,
     );
-    return rows.map(toRegistration);
+    return this.withFiles(rows);
   }
 
   async recoverInterrupted(): Promise<void> {
@@ -573,7 +654,7 @@ class SqliteRegistrationRepo implements RegistrationRepo {
       'SELECT * FROM registrations WHERE substr(captured_at, 1, 10) = ? ORDER BY created_at DESC',
       day,
     );
-    return rows.map(toRegistration);
+    return this.withFiles(rows);
   }
 }
 

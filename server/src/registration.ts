@@ -209,6 +209,9 @@ export const registrationBody = z.object({
 
   beneficiaries: z.array(beneficiarySchema).max(20).optional().default([]),
 
+  // How the member will authorise withdrawals (the core app's KYC step)
+  authorizationPreference: z.enum(['SIGNATURE', 'THUMBPRINT', 'BOTH']).optional().default('SIGNATURE'),
+
   // Alert preferences
   alerts: z
     .object({

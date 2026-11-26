@@ -258,9 +258,9 @@ describe('member types, duplicate check and capability', () => {
 
   test('/me tells the app whether registration is on', async () => {
     const on = await app.inject({ method: 'GET', url: '/v1/me', headers: { authorization: auth } });
-    expect(on.json().capabilities).toEqual({ registration: true });
+    expect(on.json().capabilities).toEqual({ registration: true, documents: true });
     repo.registrationEnabled = false;
     const off = await app.inject({ method: 'GET', url: '/v1/me', headers: { authorization: auth } });
-    expect(off.json().capabilities).toEqual({ registration: false });
+    expect(off.json().capabilities).toEqual({ registration: false, documents: false });
   });
 });

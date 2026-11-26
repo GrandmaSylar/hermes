@@ -20,6 +20,8 @@ import type {
 import type { Config } from './config';
 import { smsPhone } from './sms';
 import * as registration from './mssql-registration';
+import * as documents from './mssql-documents';
+import type { CheckedDocument } from './documents';
 import type { RegistrationBody } from './registration';
 import { buildSchema, describe as describeSchema, has, nameExpr, pick, product, TABLES, type Schema } from './schema';
 
@@ -60,6 +62,7 @@ export class MssqlRepo implements Repo {
     if (!built.schema.shares) log(`Share deposits are off; missing: ${built.sharesMissing.join(', ')}`);
     if (!built.schema.sms) log(`Pending-deposit text messages are off; missing: ${built.smsMissing.join(', ')}`);
     if (!built.schema.registration) log(`Member registration is off; missing: ${built.registrationMissing.join(', ')}`);
+    else if (!built.schema.documents) log(`KYC file upload is off; missing: ${built.documentsMissing.join(', ')}`);
     return built.schema;
   }
 
@@ -585,6 +588,9 @@ export class MssqlRepo implements Repo {
   }
   async registerMember(officer: Officer, body: RegistrationBody) {
     return registration.registerMember(this.pool, this.schema, officer, body, new Date());
+  }
+  async saveMemberDocument(officer: Officer, memberCode: string, doc: CheckedDocument) {
+    return documents.saveMemberDocument(this.pool, this.schema, officer, memberCode, doc);
   }
 
   async logSms(messageType: string, e: SmsLogEntry): Promise<void> {

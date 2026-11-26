@@ -1,4 +1,5 @@
 import { ApiError, type ApiClient, type PushItem, type PushRegistration } from '@/data/api/contract';
+import type { FileStore } from '@/data/files';
 import type { Repos } from '@/data/repositories';
 import type { RegistrationItem } from '@/domain/registration';
 import { kindForProduct } from '@/domain/deposit';
@@ -14,6 +15,9 @@ export interface SyncReport {
   /** Registrations delivered to the office (new or already received). */
   registrationsSent: number;
   registrationsRejected: number;
+  /** KYC pictures delivered, and refused by the server. */
+  documentsSent: number;
+  documentsRejected: number;
   /** Savings accounts refreshed from the core system. */
   accountsPulled: number;
   /** Collections whose office decision (approved, verified, refused) changed. */
@@ -36,6 +40,8 @@ export interface SyncDeps {
   batchSize?: number;
   /** Re-download every member and balance now, ignoring how recent the cached copy is. */
   fullRefresh?: boolean;
+  /** Where KYC pictures are kept on the phone. Without it, pictures are not sent. */
+  files?: FileStore;
 }
 
 const DAY_MS = 24 * 60 * 60 * 1000;
@@ -95,6 +101,8 @@ async function run(deps: SyncDeps): Promise<SyncReport> {
     pulledMembers: 0,
     registrationsSent: 0,
     registrationsRejected: 0,
+    documentsSent: 0,
+    documentsRejected: 0,
     accountsPulled: 0,
     decisionsUpdated: 0,
     serverError: null,
@@ -110,7 +118,10 @@ async function run(deps: SyncDeps): Promise<SyncReport> {
 
     // Registration is offered only when the server says it can take it. Until then registrations wait safely on the phone.
     await refreshRegistration(deps);
-    if (api.capabilities.registration) await pushRegistrations(deps, report, batchSize);
+    if (api.capabilities.registration) {
+      await pushRegistrations(deps, report, batchSize);
+      await sendDocuments(deps, report);
+    }
 
     for (;;) {
       const batch = await repos.outbox.due(batchSize);
@@ -217,6 +228,7 @@ async function pushRegistrations(deps: SyncDeps, report: SyncReport, batchSize: 
       await repos.registrations.applyResult(r.localRegistrationId, 'REJECTED', {
         lastError: 'Saved by an older version of the app and never sent. Register this member again.',
       });
+      await discardFiles(deps, r.localRegistrationId, 'The registration was not sent.');
     }
     const batch = due.filter((r): r is RegistrationItem & { payload: NonNullable<RegistrationItem['payload']> } => r.payload !== null);
     if (batch.length === 0) continue;
@@ -246,10 +258,12 @@ async function pushRegistrations(deps: SyncDeps, report: SyncReport, batchSize: 
         case 'REJECTED':
           report.registrationsRejected += 1;
           await repos.registrations.applyResult(result.localRegistrationId, 'REJECTED', { lastError: result.reason ?? 'Rejected.' });
+          await discardFiles(deps, result.localRegistrationId, 'The registration was refused.');
           break;
         case 'CONFLICT':
           report.registrationsRejected += 1;
           await repos.registrations.applyResult(result.localRegistrationId, 'CONFLICT', { lastError: result.reason ?? 'Conflict.' });
+          await discardFiles(deps, result.localRegistrationId, 'The registration was refused.');
           break;
       }
     }
@@ -258,6 +272,43 @@ async function pushRegistrations(deps: SyncDeps, report: SyncReport, batchSize: 
       await repos.registrations.release(unanswered);
       return;
     }
+  }
+}
+
+/** A registration that will never be delivered: its pictures are not kept on the phone. */
+async function discardFiles(deps: SyncDeps, localRegistrationId: string, reason: string): Promise<void> {
+  const files = await deps.repos.registrations.abandonFiles(localRegistrationId, reason);
+  if (deps.files) await Promise.all(files.map((f) => deps.files!.remove(f.uri).catch(() => undefined)));
+}
+
+/**
+ * Sends the KYC pictures of registrations the office has received, one at a time so a phone never holds
+ * more than one picture in memory. A picture is deleted from the phone as soon as it has been delivered
+ * or refused. Network and server trouble stop the sync and leave the rest waiting.
+ */
+async function sendDocuments(deps: SyncDeps, report: SyncReport): Promise<void> {
+  const { repos, api, session, files } = deps;
+  if (!api.capabilities.documents || !files) return;
+  for (;;) {
+    const [next] = await repos.registrations.filesToSend(1);
+    if (!next) return;
+    let dataBase64: string;
+    try {
+      dataBase64 = await files.readBase64(next.uri);
+    } catch {
+      report.documentsRejected += 1;
+      await repos.registrations.applyFileResult(next.localRegistrationId, next.kind, 'REJECTED', 'The picture is no longer on this phone. Ask the office to add it.');
+      continue;
+    }
+    const result = await api.uploadDocument(session, next.memberCode, { kind: next.kind, fileName: next.name, dataBase64 });
+    if (result.status === 'SAVED') {
+      report.documentsSent += 1;
+      await repos.registrations.applyFileResult(next.localRegistrationId, next.kind, 'SENT');
+    } else {
+      report.documentsRejected += 1;
+      await repos.registrations.applyFileResult(next.localRegistrationId, next.kind, 'REJECTED', result.reason ?? 'The server refused this picture.');
+    }
+    await files.remove(next.uri).catch(() => undefined);
   }
 }
 

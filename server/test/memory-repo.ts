@@ -1,3 +1,5 @@
+import { DocumentError } from '../src/mssql-documents';
+import type { CheckedDocument } from '../src/documents';
 import { toMinor } from '../src/money';
 import { originalReference, REF_PREFIX, storedReference } from '../src/reference';
 import type { RegistrationBody } from '../src/registration';
@@ -31,6 +33,10 @@ export class MemoryRepo implements Repo {
   private next = 1000;
   /** Registration is on by default; a test turns it off to see the switched-off behaviour. */
   registrationEnabled = true;
+  documentsEnabled = true;
+  /** KYC files saved by saveMemberDocument, one per member and kind. Members in `approved` are no longer pending. */
+  documents = new Map<string, CheckedDocument>();
+  approved = new Set<string>();
   memberTypes: MemberTypeRow[] = [
     { code: 'IND', description: 'INDIVIDUAL' },
     { code: 'KID', description: 'KIDDY SAVINGS' },
@@ -42,7 +48,7 @@ export class MemoryRepo implements Repo {
   existing: { code: string; name: string; nationalId?: string; voterIdNo?: string; nhisNo?: string; passportNo?: string; phone?: string; email?: string }[] = [];
 
   describeSchema() {
-    return { sharesEnabled: true, registrationEnabled: this.registrationEnabled };
+    return { sharesEnabled: true, registrationEnabled: this.registrationEnabled, documentsEnabled: this.documentsEnabled };
   }
   async listMemberTypes() {
     return this.memberTypes;
@@ -93,6 +99,13 @@ export class MemoryRepo implements Repo {
     const memberCode = `${officer.branchCode.padStart(3, '0')}${String(4000 + this.registered.length).padStart(7, '0')}`;
     this.registered.push({ memberCode, by: officer.staffId, body, branchCode: officer.branchCode });
     return { memberCode };
+  }
+
+  async saveMemberDocument(officer: Officer, memberCode: string, doc: CheckedDocument) {
+    const member = this.registered.find((r) => r.memberCode === memberCode && r.by === officer.staffId);
+    if (!member) throw new DocumentError(404, 'That member was not found.');
+    if (this.approved.has(memberCode)) throw new DocumentError(409, 'This member has already been approved, so documents can no longer be added from the phone.');
+    this.documents.set(`${memberCode}:${doc.kind}`, doc);
   }
 
   async findOfficer(username: string) {

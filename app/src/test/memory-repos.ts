@@ -1,5 +1,6 @@
 import type { OfficeDecision, SavingsAccountInfo, ServerMember } from '@/data/api/contract';
 import type {
+  FileToSend,
   KvRepo,
   MemberRepo,
   NewOutboxItem,
@@ -9,7 +10,7 @@ import type {
   Repos,
 } from '@/data/repositories';
 import type { UnsyncedTotals } from '@/domain/capture';
-import type { RegistrationItem } from '@/domain/registration';
+import type { KycKind, RegistrationFile, RegistrationItem } from '@/domain/registration';
 import { memberMatches, memberRank, queryWords } from '@/domain/member-search';
 import { toMinor } from '@/domain/money';
 import type { Member, OutboxItem, OutboxStatus } from '@/domain/types';
@@ -161,7 +162,8 @@ class MemoryRegistrations implements RegistrationRepo {
 
   async enqueue(item: NewRegistration) {
     if (this.rows.has(item.localRegistrationId)) return;
-    this.rows.set(item.localRegistrationId, { ...item, status: 'PENDING', attempts: 0, lastError: null, serverId: null });
+    const files: RegistrationFile[] = item.files.map((f) => ({ ...f, status: 'PENDING', attempts: 0, lastError: null }));
+    this.rows.set(item.localRegistrationId, { ...item, files, status: 'PENDING', attempts: 0, lastError: null, serverId: null });
   }
   async list(limit: number) {
     return [...this.rows.values()].sort((a, b) => b.createdAt.localeCompare(a.createdAt)).slice(0, limit);
@@ -209,6 +211,29 @@ class MemoryRegistrations implements RegistrationRepo {
   }
   async forDay(day: string) {
     return [...this.rows.values()].filter((r) => r.capturedAt.slice(0, 10) === day);
+  }
+  async filesToSend(limit: number): Promise<FileToSend[]> {
+    const out: FileToSend[] = [];
+    for (const r of this.rows.values()) {
+      if (r.status !== 'SYNCED' || !r.serverId) continue;
+      for (const f of r.files) if (f.status === 'PENDING') out.push({ ...f, localRegistrationId: r.localRegistrationId, memberCode: r.serverId });
+    }
+    return out.slice(0, limit);
+  }
+  async applyFileResult(id: string, kind: KycKind, status: 'SENT' | 'REJECTED', lastError?: string | null) {
+    const f = this.rows.get(id)?.files.find((x) => x.kind === kind);
+    if (!f) return;
+    f.status = status;
+    f.attempts += 1;
+    f.lastError = lastError ?? null;
+  }
+  async abandonFiles(id: string, reason: string) {
+    const files = (this.rows.get(id)?.files ?? []).filter((f) => f.status === 'PENDING');
+    for (const f of files) {
+      f.status = 'REJECTED';
+      f.lastError = reason;
+    }
+    return files;
   }
 }
 

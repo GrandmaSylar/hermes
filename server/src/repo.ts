@@ -1,3 +1,4 @@
+import type { CheckedDocument } from './documents';
 import type { IdValues, RegistrationBody } from './registration';
 
 /**
@@ -172,4 +173,6 @@ export interface Repo {
   findEarlierRegistration(officer: Officer, body: RegistrationBody): Promise<string | null>;
   /** Creates the pending member and everything that belongs to them in one transaction. Returns the new member code. */
   registerMember(officer: Officer, body: RegistrationBody): Promise<{ memberCode: string }>;
+  /** Saves one KYC file for a pending member this banker registered. Throws DocumentError when it cannot. */
+  saveMemberDocument(officer: Officer, memberCode: string, doc: CheckedDocument): Promise<void>;
 }

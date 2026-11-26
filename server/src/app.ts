@@ -16,6 +16,8 @@ import {
   registrationProblems,
   ID_TYPES,
 } from './registration';
+import { checkDocument, documentBody, MAX_DOCUMENT_BASE64 } from './documents';
+import { DocumentError } from './mssql-documents';
 import type { PendingSmsNotifier } from './sms';
 import { Tokens } from './tokens';
 
@@ -143,6 +145,8 @@ export function buildApp(deps: AppDeps): FastifyInstance {
 
   /** Registration is on once every table it writes to is visible to the server's database login. */
   const registrationOn = () => repo.describeSchema?.().registrationEnabled === true;
+  /** KYC files can be saved once the member media table is visible too. */
+  const documentsOn = () => registrationOn() && repo.describeSchema?.().documentsEnabled === true;
 
   app.get('/health', async (_req, reply) => {
     try {
@@ -220,7 +224,7 @@ export function buildApp(deps: AppDeps): FastifyInstance {
       officer: profile(officer),
       limits: config.limits,
       pendingApproval: pending,
-      capabilities: { registration: registrationOn() },
+      capabilities: { registration: registrationOn(), documents: documentsOn() },
     };
   });
 
@@ -410,6 +414,30 @@ export function buildApp(deps: AppDeps): FastifyInstance {
     const created = await repo.registerMember(officer, body);
     return reply.code(201).send({ status: 'ACCEPTED', localRegistrationId: body.localRegistrationId, serverId: created.memberCode });
   });
+
+  /** One KYC file for a member this banker registered and the office has not approved yet. Sending the same kind again replaces it. */
+  app.post(
+    '/v1/members/:code/documents',
+    { preHandler: requireOfficer, bodyLimit: MAX_DOCUMENT_BASE64 + 4096 },
+    async (req, reply) => {
+      if (!documentsOn()) return fail(reply, 503, 'Uploading KYC documents is not switched on yet.');
+      const code = String((req.params as { code?: string }).code ?? '');
+      if (!/^\d{1,10}$/.test(code)) return fail(reply, 400, 'Invalid member number.');
+      const parsed = documentBody.safeParse(req.body);
+      if (!parsed.success) return fail(reply, 400, parsed.error.issues[0]?.message ?? 'Invalid document.');
+      const checked = checkDocument(parsed.data);
+      if ('problem' in checked) return reply.code(422).send({ status: 'REJECTED', kind: parsed.data.kind, reason: checked.problem });
+      try {
+        await repo.saveMemberDocument(req.officer!, code, checked);
+      } catch (error) {
+        if (error instanceof DocumentError) {
+          return reply.code(error.status).send({ status: error.status === 409 ? 'CONFLICT' : 'REJECTED', kind: checked.kind, reason: error.message });
+        }
+        throw error;
+      }
+      return { status: 'SAVED', kind: checked.kind };
+    },
+  );
 
   app.get('/v1/deposits', { preHandler: requireOfficer }, async (req, reply) => {
     const parsed = depositsQuery.safeParse(req.query);

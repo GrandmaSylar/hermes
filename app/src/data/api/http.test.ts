@@ -144,6 +144,7 @@ describe('sign-in', () => {
     expect(api.capabilities).toEqual({
       otp: false,
       registration: false,
+      documents: false,
       officeDecisions: true,
       mobileMoney: false,
       shareContribution: true,

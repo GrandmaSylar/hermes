@@ -1,6 +1,9 @@
+import type { FileStore } from '@/data/files';
 import type { Repos } from '@/data/repositories';
 import {
   ID_TYPES,
+  KYC_SLOTS,
+  type KycFile,
   primaryId,
   toPayload,
   validateAll,
@@ -28,6 +31,7 @@ export async function registerMember(
   types: MemberTypeOption[],
   newId: () => string,
   now: () => Date = () => new Date(),
+  files?: FileStore,
 ): Promise<RegisterResult> {
   const today = now();
   const failed = validateAll(form, types, today);
@@ -55,8 +59,24 @@ export async function registerMember(
     };
   }
 
+  // The chosen pictures move into the app's own storage, so they are still there when the phone syncs.
+  const chosen = KYC_SLOTS.map((s) => form.documents[s.kind]).filter((f): f is KycFile => !!f);
+  const kept: KycFile[] = [];
+  if (chosen.length > 0) {
+    if (!files) return { ok: false, problems: [], message: 'This phone cannot keep the pictures. Remove them or update the app.' };
+    try {
+      for (const f of chosen) {
+        const extension = f.mimeType === 'application/pdf' ? 'pdf' : f.mimeType === 'image/png' ? 'png' : f.mimeType === 'image/gif' ? 'gif' : 'jpg';
+        kept.push({ ...f, uri: await files.keep(f.uri, payload.localRegistrationId, f.kind, extension) });
+      }
+    } catch {
+      await Promise.all(kept.map((k) => files.remove(k.uri).catch(() => undefined)));
+      return { ok: false, problems: [], message: 'The pictures could not be saved on this phone. Check that there is free space and try again.' };
+    }
+  }
+
   const id = primaryId(payload);
-  const item: Omit<RegistrationItem, 'status' | 'attempts' | 'lastError' | 'serverId'> = {
+  const item: Omit<RegistrationItem, 'status' | 'attempts' | 'lastError' | 'serverId' | 'files'> & { files: KycFile[] } = {
     localRegistrationId: payload.localRegistrationId,
     firstName: payload.firstName,
     lastName: payload.lastName,
@@ -69,7 +89,23 @@ export async function registerMember(
     capturedAt: stamp,
     createdAt: stamp,
     payload,
+    files: kept,
   };
-  await repos.registrations.enqueue(item);
-  return { ok: true, item: { ...item, status: 'PENDING', attempts: 0, lastError: null, serverId: null } };
+  try {
+    await repos.registrations.enqueue(item);
+  } catch (error) {
+    if (files) await Promise.all(kept.map((k) => files.remove(k.uri).catch(() => undefined)));
+    throw error;
+  }
+  return {
+    ok: true,
+    item: {
+      ...item,
+      status: 'PENDING',
+      attempts: 0,
+      lastError: null,
+      serverId: null,
+      files: kept.map((f) => ({ ...f, status: 'PENDING', attempts: 0, lastError: null })),
+    },
+  };
 }

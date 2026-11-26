@@ -5,6 +5,8 @@ import type { AccountOption, MobilizerLimits, Session } from '@/domain/types';
 import {
   ApiError,
   type ApiClient,
+  type DocumentResult,
+  type DocumentUpload,
   type ApiCapabilities,
   type MemberPage,
   type OfficeDecision,
@@ -112,6 +114,7 @@ export class MockApi implements ApiClient {
     this.capabilities = {
       otp: true,
       registration: true,
+      documents: true,
       officeDecisions: true,
       mobileMoney: options.mobileMoney ?? false,
       shareContribution: true,
@@ -219,6 +222,16 @@ export class MockApi implements ApiClient {
       if (value && this.registeredIds.has(value)) out.push({ label, value, memberCode: 'MOCK', memberName: 'Another member' });
     }
     return out;
+  }
+
+  /** KYC files received, as "memberCode:kind" -> size in bytes. */
+  readonly documents = new Map<string, number>();
+
+  async uploadDocument(_session: Session, memberCode: string, upload: DocumentUpload): Promise<DocumentResult> {
+    this.guard();
+    if (!/^MD-\d+$/.test(memberCode)) return { status: 'REJECTED', reason: 'That member was not found.' };
+    this.documents.set(`${memberCode}:${upload.kind}`, upload.dataBase64.length);
+    return { status: 'SAVED' };
   }
 
   async pushRegistrations(session: Session, items: PushRegistration[]): Promise<RegistrationResult[]> {

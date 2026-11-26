@@ -23,3 +23,12 @@ GRANT SELECT, INSERT ON dbo.CustomerCompliance TO hermes_field;        -- starts
 GO
 -- A registered member stays PENDING until the office approves them, exactly as a member
 -- registered at the office does. The server cannot activate, change or delete a member.
+
+-- KYC files (passport photo, ID card, proof of address, signature, thumbprint).
+-- A file is added to a member's media row after the member is saved, so these tables also
+-- need UPDATE. The server only ever changes rows of a PENDING member that the same banker registered.
+GRANT SELECT, INSERT, UPDATE ON dbo.CustomerMedia TO hermes_field;
+GRANT SELECT, INSERT, UPDATE ON dbo.CustomerDocuments TO hermes_field;                -- back of the ID card
+GRANT SELECT, INSERT ON dbo.MemberAuthorizationProfile TO hermes_field;               -- signature / thumbprint / both
+GRANT SELECT, INSERT, UPDATE ON dbo.MemberAuthorizationCredential TO hermes_field;
+GO

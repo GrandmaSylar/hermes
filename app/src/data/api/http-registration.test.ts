@@ -41,13 +41,14 @@ const payload = () =>
 describe('member registration over HTTP', () => {
   test('registration is off until the server says it is on, and follows what it says', async () => {
     let on = false;
-    const { api } = make({ 'GET /v1/me': () => ({ status: 200, body: { capabilities: { registration: on } } }) });
+    const { api } = make({ 'GET /v1/me': () => ({ status: 200, body: { capabilities: { registration: on, documents: on } } }) });
     expect(api.capabilities.registration).toBe(false);
     await api.refreshCapabilities(session);
     expect(api.capabilities.registration).toBe(false);
     on = true;
     await api.refreshCapabilities(session);
     expect(api.capabilities.registration).toBe(true);
+    expect(api.capabilities.documents).toBe(true);
     on = false;
     await api.refreshCapabilities(session);
     expect(api.capabilities.registration).toBe(false);
@@ -108,5 +109,32 @@ describe('member registration over HTTP', () => {
       { label: 'Voter ID', value: 'AB1234567', memberCode: '1000000007', memberName: 'Kofi Mensah' },
     ]);
     expect(calls[1].body).toEqual({ voterIdNo: 'AB1234567' });
+  });
+});
+
+describe('KYC pictures over HTTP', () => {
+  const upload = { kind: 'signature', fileName: 'sig.jpg', dataBase64: 'AAAA' };
+
+  test('are sent to the member and counted as saved', async () => {
+    const { api, calls } = make({ 'POST /v1/members/1000004762/documents': () => ({ status: 200, body: { status: 'SAVED', kind: 'signature' } }) });
+    expect(await api.uploadDocument(session, '1000004762', upload)).toEqual({ status: 'SAVED' });
+    expect(calls[0].body).toEqual(upload);
+  });
+
+  test('a refusal carries the reason, and a member already approved is a conflict', async () => {
+    const answers = [
+      { status: 422, body: { status: 'REJECTED', reason: 'Signature must be a JPG, PNG or GIF picture.' } },
+      { status: 409, body: { status: 'CONFLICT', reason: 'This member has already been approved.' } },
+      { status: 404, body: { status: 'REJECTED', reason: 'That member was not found.' } },
+    ];
+    const { api } = make({ 'POST /v1/members/1000004762/documents': () => answers.shift()! });
+    expect(await api.uploadDocument(session, '1000004762', upload)).toEqual({ status: 'REJECTED', reason: 'Signature must be a JPG, PNG or GIF picture.' });
+    expect(await api.uploadDocument(session, '1000004762', upload)).toMatchObject({ status: 'CONFLICT' });
+    expect(await api.uploadDocument(session, '1000004762', upload)).toMatchObject({ status: 'REJECTED', reason: 'That member was not found.' });
+  });
+
+  test('a server that is not ready leaves the picture waiting', async () => {
+    const { api } = make({ 'POST /v1/members/1000004762/documents': () => ({ status: 503, body: { message: 'not on' } }) });
+    await expect(api.uploadDocument(session, '1000004762', upload)).rejects.toMatchObject({ kind: 'SERVER' });
   });
 });
