@@ -6,6 +6,7 @@ import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import type { Member } from '@/domain/types';
 import { useApp } from '@/state/AppProvider';
 import { RADIUS, SHADOW } from '@/ui/theme';
+import { AccountMenu } from '@/ui/account-menu';
 import { PressScale, Reveal, SkeletonRow } from '@/ui/motion';
 import { Avatar, Card, colors } from '@/ui/theme';
 
@@ -99,7 +100,10 @@ export default function MembersTab() {
       contentContainerStyle={{ paddingTop: insets.top + 12, paddingHorizontal: 16, paddingBottom: 32, gap: 10 }}
       ListHeaderComponent={
         <View style={{ gap: 14, marginBottom: 6 }}>
-          <Text style={{ fontSize: 26, fontWeight: '700', color: colors.text, letterSpacing: -0.6 }}>{mode === 'deposit' ? 'Take a deposit' : 'Members'}</Text>
+          <View style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' }}>
+            <Text style={{ fontSize: 26, fontWeight: '700', color: colors.text, letterSpacing: -0.6 }}>{mode === 'deposit' ? 'Take a deposit' : 'Members'}</Text>
+            <AccountMenu />
+          </View>
           {mode === 'deposit' ? (
             <Reveal>
               <View style={{ flexDirection: 'row', gap: 10, alignItems: 'center', backgroundColor: colors.primarySoft, borderRadius: 16, padding: 14, ...RADIUS }}>

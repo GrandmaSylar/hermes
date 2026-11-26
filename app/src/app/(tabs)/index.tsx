@@ -12,6 +12,7 @@ import { useApp } from '@/state/AppProvider';
 import { KV_OFFICE, KV_PULLED_AT } from '@/sync/engine';
 import { DepositRow, RADIUS, RegistrationRow, Tappable, nums, shadow } from '@/ui/activity-rows';
 import { PressScale, Reveal, SkeletonRow } from '@/ui/motion';
+import { AccountMenu } from '@/ui/account-menu';
 import { Watermark } from '@/ui/brand';
 import { brand, brandGradient } from '@/ui/colors';
 import { colors } from '@/ui/theme';
@@ -21,14 +22,6 @@ type IconName = React.ComponentProps<typeof Ionicons>['name'];
 const day = () => new Date().toISOString().slice(0, 10);
 
 type Entry = { at: string; key: string; deposit?: OutboxItem; registration?: RegistrationItem };
-const initials = (name: string) =>
-  name
-    .trim()
-    .split(/\s+/)
-    .slice(0, 2)
-    .map((w) => w[0]?.toUpperCase() ?? '')
-    .join('');
-
 function Segmented({ value, onChange }: { value: 'today' | 'all'; onChange: (v: 'today' | 'all') => void }) {
   const option = (key: 'today' | 'all', label: string) => (
     <Pressable
@@ -167,9 +160,7 @@ export default function HomeTab() {
           <Text style={{ fontSize: 14, color: colors.muted, fontWeight: '500' }}>{greeting(now)}, {firstName(name)}</Text>
           <Text selectable numberOfLines={2} style={{ fontSize: 24, fontWeight: '700', color: colors.text, letterSpacing: -0.4 }}>{name || 'Field officer'}</Text>
         </View>
-        <View style={{ width: 48, height: 48, borderRadius: 24, backgroundColor: colors.primary, alignItems: 'center', justifyContent: 'center' }}>
-          <Text style={{ color: colors.primaryText, fontSize: 16, fontWeight: '700' }}>{initials(name)}</Text>
-        </View>
+        <AccountMenu />
       </Reveal>
 
       {officeLineText ? (

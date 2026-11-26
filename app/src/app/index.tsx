@@ -1,5 +1,4 @@
 import { Ionicons } from '@expo/vector-icons';
-import { Redirect } from 'expo-router';
 import { Text, View } from 'react-native';
 import { useApp } from '@/state/AppProvider';
 import { CuaEmblem } from '@/ui/brand';
@@ -35,6 +34,6 @@ export default function Index() {
       </View>
     );
   }
-  if (status === 'ready') return <Redirect href="/(tabs)" />;
-  return <Redirect href="/login" />;
+  // Only shown while starting or if the app cannot start. Once that is settled the navigator moves on by itself.
+  return null;
 }
