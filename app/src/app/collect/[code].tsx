@@ -21,10 +21,11 @@ import { PAYMENT_LABELS, type Member, type OutboxItem, type PaymentMode } from '
 import { useApp } from '@/state/AppProvider';
 import { captureCollection } from '@/sync/capture';
 import { Reveal, SuccessMark } from '@/ui/motion';
+import { useMemberPhoto } from '@/state/use-member-photo';
 import { Receipt, useBrand } from '@/ui/receipt';
 import { Watermark } from '@/ui/brand';
 import { brand as palette, brandGradient } from '@/ui/colors';
-import { Button, Card, Field, RADIUS, colors } from '@/ui/theme';
+import { Avatar, Button, Card, Field, RADIUS, colors } from '@/ui/theme';
 import { AccountChooser, ConfirmDepositModal, PaymentModeChooser } from '@/ui/deposit-parts';
 
 /**
@@ -37,6 +38,7 @@ export default function DepositScreen() {
   const type = parseDepositType(typeParam);
   const insets = useSafeAreaInsets();
   const brand = useBrand();
+  const photo = useMemberPhoto(code);
   const page = { padding: 16, paddingBottom: insets.bottom + 32, gap: 16 };
   const { repos, session, newId, touch, syncNow, capabilities, version } = useApp();
   const [member, setMember] = useState<Member | null>(null);
@@ -177,10 +179,13 @@ export default function DepositScreen() {
   return (
     <KeyboardAvoidingView style={{ flex: 1 }} behavior={Platform.OS === 'ios' ? 'padding' : undefined}>
       <ScrollView style={{ backgroundColor: colors.bg }} contentContainerStyle={page} keyboardShouldPersistTaps="handled">
-        <Reveal>
-          <Text style={{ fontSize: 12, color: colors.primary, fontWeight: '700', letterSpacing: 0.8 }}>{title.toUpperCase()}</Text>
-          <Text selectable style={{ fontSize: 24, fontWeight: '700', color: colors.text, letterSpacing: -0.5 }}>{member.name}</Text>
-          <Text selectable style={{ color: colors.muted, fontSize: 14 }}>{member.memberCode}</Text>
+        <Reveal style={{ flexDirection: 'row', alignItems: 'center', gap: 14 }}>
+          <Avatar name={member.name} size={56} tone="soft" photo={photo} />
+          <View style={{ flex: 1 }}>
+            <Text style={{ fontSize: 12, color: colors.primary, fontWeight: '700', letterSpacing: 0.8 }}>{title.toUpperCase()}</Text>
+            <Text selectable numberOfLines={2} style={{ fontSize: 22, fontWeight: '700', color: colors.text, letterSpacing: -0.4 }}>{member.name}</Text>
+            <Text selectable style={{ color: colors.muted, fontSize: 14 }}>{member.memberCode}</Text>
+          </View>
         </Reveal>
 
         <AccountChooser

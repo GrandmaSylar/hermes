@@ -281,4 +281,16 @@ describe('member types, duplicate check and capability', () => {
     const none = await app.inject({ method: 'GET', url: '/v1/credit-union/logo', headers: { authorization: auth } });
     expect(none.json()).toEqual({ version: null, dataUri: null });
   });
+
+  test('a member photo is sent once, then only when it changes, and only for a real member number', async () => {
+    repo.photos.set('1000004762', { version: 'p1', mimeType: 'image/jpeg', dataBase64: '/9j/AAAA' });
+    const first = await app.inject({ method: 'GET', url: '/v1/members/1000004762/photo', headers: { authorization: auth } });
+    expect(first.json()).toEqual({ version: 'p1', mimeType: 'image/jpeg', dataBase64: '/9j/AAAA' });
+    const again = await app.inject({ method: 'GET', url: '/v1/members/1000004762/photo?have=p1', headers: { authorization: auth } });
+    expect(again.json()).toEqual({ version: 'p1', mimeType: 'image/jpeg', dataBase64: null, unchanged: true });
+    const none = await app.inject({ method: 'GET', url: '/v1/members/1000000001/photo', headers: { authorization: auth } });
+    expect(none.json()).toEqual({ version: null, mimeType: null, dataBase64: null });
+    const bad = await app.inject({ method: 'GET', url: '/v1/members/abc/photo', headers: { authorization: auth } });
+    expect(bad.statusCode).toBe(400);
+  });
 });

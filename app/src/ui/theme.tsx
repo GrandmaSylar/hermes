@@ -1,3 +1,4 @@
+import { Image } from 'expo-image';
 import { useRef, useState } from 'react';
 import { Animated, Text, TextInput, View, type TextInputProps } from 'react-native';
 import type { OutboxStatus } from '@/domain/types';
@@ -117,9 +118,12 @@ export function SectionLabel({ children }: { children: React.ReactNode }) {
 }
 
 /** A round badge with a person's initials. */
-export function Avatar({ name, size = 56, tone = 'blue' }: { name: string; size?: number; tone?: 'blue' | 'soft' }) {
+export function Avatar({ name, size = 56, tone = 'blue', photo }: { name: string; size?: number; tone?: 'blue' | 'soft'; photo?: string | null }) {
   const letters = name.trim().split(/\s+/).slice(0, 2).map((w) => w[0]?.toUpperCase() ?? '').join('');
   const soft = tone === 'soft';
+  if (photo) {
+    return <Image source={{ uri: photo }} transition={250} contentFit="cover" accessibilityLabel={`${name}'s photo`} style={{ width: size, height: size, borderRadius: size / 2, backgroundColor: colors.primarySoft }} />;
+  }
   return (
     <View style={{ width: size, height: size, borderRadius: size / 2, backgroundColor: soft ? colors.primarySoft : colors.primary, alignItems: 'center', justifyContent: 'center' }}>
       <Text style={{ color: soft ? colors.primaryDeep : colors.primaryText, fontSize: size * 0.34, fontWeight: '700' }}>{letters}</Text>

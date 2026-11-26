@@ -5,6 +5,7 @@ import { createContext, useCallback, useContext, useEffect, useMemo, useRef, use
 import { AppState } from 'react-native';
 import type { ApiCapabilities, ApiClient, MemberConflict, MemberLookup } from '@/data/api/contract';
 import { HttpApi } from '@/data/api/http';
+import type { PhotoAnswer } from '@/data/photos';
 import { MockApi } from '@/data/api/mock';
 import { API_MODE, API_URL } from '@/config';
 import { openDatabase, wipeLocalData } from '@/data/db/database';
@@ -38,6 +39,8 @@ interface AppContextValue {
   capabilities: ApiCapabilities;
   /** Who already holds these IDs, phone numbers or emails. Null when there is no connection to ask. */
   checkMember: (lookup: MemberLookup) => Promise<MemberConflict[] | null>;
+  /** A member's passport photo from the office, or null when offline or there is none. */
+  memberPhoto: (memberCode: string, have: string | null) => Promise<PhotoAnswer>;
   /** Where KYC pictures are kept on the phone until they are sent. */
   files: FileStore;
   /** 'mock' means demo data: the app is not connected to the core system. */
@@ -192,6 +195,14 @@ export function AppProvider({ children }: { children: ReactNode }) {
     [api, session],
   );
 
+  const memberPhoto = useCallback(
+    async (memberCode: string, have: string | null): Promise<PhotoAnswer> => {
+      if (!session || offlineRef.current || !api.fetchMemberPhoto) return null;
+      return api.fetchMemberPhoto(session, memberCode, have);
+    },
+    [api, session],
+  );
+
   const unlock = useCallback(async () => {
     const ok = await unlockWithDevice();
     if (ok) setStatus('ready');
@@ -233,6 +244,7 @@ export function AppProvider({ children }: { children: ReactNode }) {
     signInPassword,
     capabilities: api.capabilities,
     checkMember,
+    memberPhoto,
     files,
     apiMode: API_MODE,
     signInOtp,

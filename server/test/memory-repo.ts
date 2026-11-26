@@ -123,6 +123,10 @@ export class MemoryRepo implements Repo {
   async getLogo(_branchCode: string) {
     return this.logo;
   }
+  photos = new Map<string, { version: string; mimeType: string; dataBase64: string }>();
+  async getMemberPhoto(_officer: Officer, memberCode: string) {
+    return this.photos.get(memberCode) ?? null;
+  }
   async listMembers(_branchCode: string, afterCode: number, limit: number) {
     return this.members
       .filter((m) => Number(m.code) > afterCode)

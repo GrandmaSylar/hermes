@@ -168,3 +168,21 @@ describe('stored logo', () => {
     expect(logoFrom(`data:image/png;base64,${'A'.repeat(1_600_000)}`)).toBeNull();
   });
 });
+
+describe('stored member photo', () => {
+  const jpeg = Buffer.from([0xff, 0xd8, 0xff, 0xe0, 0x00, 0x10, 0x4a, 0x46, 0x49, 0x46]);
+  test('is accepted when the bytes are a picture, and the type comes from the bytes', async () => {
+    const { photoFrom } = await import('../src/documents');
+    const a = photoFrom(jpeg);
+    expect(a?.mimeType).toBe('image/jpeg');
+    expect(a?.dataBase64).toBe(jpeg.toString('base64'));
+    expect(photoFrom(Buffer.concat([jpeg, Buffer.from([1])]))?.version).not.toBe(a?.version);
+  });
+  test('is left out when it is empty, not a picture, or too large', async () => {
+    const { photoFrom } = await import('../src/documents');
+    expect(photoFrom(null)).toBeNull();
+    expect(photoFrom(Buffer.alloc(0))).toBeNull();
+    expect(photoFrom(Buffer.from('%PDF-1.4 hello'))).toBeNull();
+    expect(photoFrom(Buffer.alloc(5 * 1024 * 1024 + 1, 0xff))).toBeNull();
+  });
+});
