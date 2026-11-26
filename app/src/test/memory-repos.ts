@@ -155,6 +155,11 @@ class MemoryOutbox implements OutboxRepo {
   async forDay(day: string) {
     return [...this.rows.values()].filter((i) => i.collectedAt.slice(0, 10) === day);
   }
+  async inRange(fromDay: string, toDay: string) {
+    return [...this.rows.values()]
+      .filter((i) => i.collectedAt.slice(0, 10) >= fromDay && i.collectedAt.slice(0, 10) <= toDay)
+      .sort((a, b) => b.collectedAt.localeCompare(a.collectedAt));
+  }
 }
 
 class MemoryRegistrations implements RegistrationRepo {
@@ -211,6 +216,11 @@ class MemoryRegistrations implements RegistrationRepo {
   }
   async forDay(day: string) {
     return [...this.rows.values()].filter((r) => r.capturedAt.slice(0, 10) === day);
+  }
+  async inRange(fromDay: string, toDay: string) {
+    return [...this.rows.values()]
+      .filter((r) => r.capturedAt.slice(0, 10) >= fromDay && r.capturedAt.slice(0, 10) <= toDay)
+      .sort((a, b) => b.capturedAt.localeCompare(a.capturedAt));
   }
   async filesToSend(limit: number): Promise<FileToSend[]> {
     const out: FileToSend[] = [];

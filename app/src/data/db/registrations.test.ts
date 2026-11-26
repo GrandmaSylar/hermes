@@ -33,6 +33,21 @@ async function fresh() {
 
 const picture = (kind: 'passportPhoto' | 'signature') => ({ kind, uri: `file:///kyc/${kind}.jpg`, name: `${kind}.jpg`, mimeType: 'image/jpeg', size: 1234 });
 
+describe('registrations by day range on SQLite', () => {
+  test('come back newest first, both ends included', async () => {
+    const { repos } = await fresh();
+    const on = (id: string, at: string) => ({ ...item(id, make()), capturedAt: at, createdAt: at });
+    await repos.registrations.enqueue(on('a', '2026-11-20T08:00:00.000Z'));
+    await repos.registrations.enqueue(on('b', '2026-11-25T09:00:00.000Z'));
+    await repos.registrations.enqueue(on('c', '2026-11-26T23:30:00.000Z'));
+    await repos.registrations.enqueue(on('d', '2026-11-27T00:10:00.000Z'));
+    const ids = (rows: { localRegistrationId: string }[]) => rows.map((r) => r.localRegistrationId);
+    expect(ids(await repos.registrations.inRange('2026-11-20', '2026-11-26'))).toEqual(['c', 'b', 'a']);
+    expect(ids(await repos.registrations.inRange('2026-11-26', '2026-11-26'))).toEqual(['c']);
+    expect(ids(await repos.registrations.inRange('0000-01-01', '9999-12-31'))).toEqual(['d', 'c', 'b', 'a']);
+  });
+});
+
 describe('registration pictures on SQLite', () => {
   test('are saved with the registration and come back with it', async () => {
     const { repos } = await fresh();

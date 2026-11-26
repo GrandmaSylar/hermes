@@ -49,6 +49,8 @@ export interface OutboxRepo {
   unsyncedTotals(): Promise<UnsyncedTotals>;
   /** Items collected within a UTC day, "YYYY-MM-DD". */
   forDay(day: string): Promise<OutboxItem[]>;
+  /** Items collected from one UTC day to another, both included ("YYYY-MM-DD"), newest first. */
+  inRange(fromDay: string, toDay: string): Promise<OutboxItem[]>;
   /** How many delivered items the office has not yet finished with (no decision, or still pending). */
   awaitingDecision(): Promise<number>;
   /**
@@ -88,6 +90,8 @@ export interface RegistrationRepo {
   hasIdNumber(idNumber: string): Promise<boolean>;
   /** Registrations captured within a UTC day, "YYYY-MM-DD". */
   forDay(day: string): Promise<RegistrationItem[]>;
+  /** Registrations captured from one UTC day to another, both included, newest first. */
+  inRange(fromDay: string, toDay: string): Promise<RegistrationItem[]>;
   /** Files not yet delivered, for registrations the core system has received (so the member's number is known). */
   filesToSend(limit: number): Promise<FileToSend[]>;
   /** Records what happened to one file. Delivered and refused files count as done. */

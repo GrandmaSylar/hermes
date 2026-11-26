@@ -5,25 +5,19 @@ import { Pressable, RefreshControl, ScrollView, Text, View } from 'react-native'
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import type { OfficeProfile } from '@/data/api/contract';
 import { ago, computeHomeFigures, firstName, ghs, greeting } from '@/domain/home';
-import { officeLine } from '@/domain/office';
-import { PRODUCT_LABELS, type OutboxItem, type ProductType } from '@/domain/types';
+import { dayLabel } from '@/domain/history';
+import type { RegistrationItem } from '@/domain/registration';
+import type { Member, OutboxItem } from '@/domain/types';
 import { useApp } from '@/state/AppProvider';
 import { KV_OFFICE, KV_PULLED_AT } from '@/sync/engine';
-import { STATUS_STYLE, colors } from '@/ui/theme';
+import { DepositRow, RADIUS, RegistrationRow, Tappable, nums, shadow } from '@/ui/activity-rows';
+import { colors } from '@/ui/theme';
 
 type IconName = React.ComponentProps<typeof Ionicons>['name'];
 
 const day = () => new Date().toISOString().slice(0, 10);
-const RADIUS = { borderCurve: 'continuous' as const };
-const nums = { fontVariant: ['tabular-nums' as const] };
-const shadow = { boxShadow: '0 1px 2px rgba(16, 24, 40, 0.06), 0 1px 3px rgba(16, 24, 40, 0.04)' };
 
-const PRODUCT_ICON: Record<ProductType, IconName> = {
-  SAVINGS_DEPOSIT: 'wallet-outline',
-  SHARE_CONTRIBUTION: 'pie-chart-outline',
-  LOAN_REPAYMENT: 'card-outline',
-};
-
+type Entry = { at: string; key: string; deposit?: OutboxItem; registration?: RegistrationItem };
 const initials = (name: string) =>
   name
     .trim()
@@ -31,28 +25,6 @@ const initials = (name: string) =>
     .slice(0, 2)
     .map((w) => w[0]?.toUpperCase() ?? '')
     .join('');
-
-/** "14:05" for today, "25 Nov, 14:05" otherwise. */
-function when(iso: string, now: Date): string {
-  const d = new Date(iso);
-  if (Number.isNaN(d.getTime())) return '';
-  const time = d.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
-  return d.toDateString() === now.toDateString() ? `Today, ${time}` : `${d.toLocaleDateString([], { day: 'numeric', month: 'short' })}, ${time}`;
-}
-
-function Tappable(props: { onPress: () => void; label: string; children: React.ReactNode; style?: object; disabled?: boolean }) {
-  return (
-    <Pressable
-      accessibilityRole="button"
-      accessibilityLabel={props.label}
-      disabled={props.disabled}
-      onPress={props.onPress}
-      style={({ pressed }) => [{ opacity: props.disabled ? 0.5 : pressed ? 0.7 : 1, transform: [{ scale: pressed ? 0.985 : 1 }] }, props.style]}
-    >
-      {props.children}
-    </Pressable>
-  );
-}
 
 function Segmented({ value, onChange }: { value: 'today' | 'all'; onChange: (v: 'today' | 'all') => void }) {
   const option = (key: 'today' | 'all', label: string) => (
@@ -104,33 +76,6 @@ function StatTile({ icon, label, value }: { icon: IconName; label: string; value
   );
 }
 
-function ActivityRow({ item, last, now }: { item: OutboxItem; last: boolean; now: Date }) {
-  const line = officeLine(item);
-  const status = STATUS_STYLE[item.status];
-  const tone = line ? (line.tone === 'good' ? colors.ok : line.tone === 'bad' ? colors.danger : colors.muted) : status.fg;
-  const refused = item.status === 'REJECTED' || item.status === 'CONFLICT' || item.officeStatus === 'REJECTED';
-  return (
-    <Tappable onPress={() => router.push(`/member/${item.memberCode}`)} label={`${item.memberName}, ${ghs(item.amount)}`}>
-      <View style={{ flexDirection: 'row', alignItems: 'center', gap: 12, paddingVertical: 12, paddingHorizontal: 16 }}>
-        <View style={{ width: 40, height: 40, borderRadius: 20, backgroundColor: refused ? colors.dangerBg : colors.primarySoft, alignItems: 'center', justifyContent: 'center' }}>
-          <Ionicons name={PRODUCT_ICON[item.productType]} size={20} color={refused ? colors.danger : colors.primary} />
-        </View>
-        <View style={{ flex: 1, gap: 2 }}>
-          <Text numberOfLines={1} style={{ fontSize: 16, fontWeight: '600', color: colors.text }}>{item.memberName}</Text>
-          <Text numberOfLines={1} style={{ fontSize: 13, color: colors.muted }}>
-            {PRODUCT_LABELS[item.productType]} · {when(item.collectedAt, now)}
-          </Text>
-        </View>
-        <View style={{ alignItems: 'flex-end', gap: 2 }}>
-          <Text style={{ fontSize: 16, fontWeight: '700', color: refused ? colors.muted : colors.text, textDecorationLine: refused ? 'line-through' : 'none', ...nums }}>{ghs(item.amount)}</Text>
-          <Text numberOfLines={1} style={{ fontSize: 12, color: tone, fontWeight: '500', maxWidth: 130 }}>{line?.text ?? status.label}</Text>
-        </View>
-      </View>
-      {last ? null : <View style={{ height: 1, backgroundColor: colors.border, marginLeft: 68 }} />}
-    </Tappable>
-  );
-}
-
 export default function HomeTab() {
   const { repos, version, session, capabilities, syncing, syncNow, lastSyncAt } = useApp();
   const insets = useSafeAreaInsets();
@@ -138,6 +83,8 @@ export default function HomeTab() {
   const [items, setItems] = useState<OutboxItem[]>([]);
   const [members, setMembers] = useState(0);
   const [registered, setRegistered] = useState(0);
+  const [regs, setRegs] = useState<RegistrationItem[]>([]);
+  const [approved, setApproved] = useState<Record<string, Pick<Member, 'status'>>>({});
   const [office, setOffice] = useState<OfficeProfile | null>(null);
   const [pulledAt, setPulledAt] = useState<string | null>(null);
   const [note, setNote] = useState('');
@@ -147,7 +94,7 @@ export default function HomeTab() {
     if (!repos) return;
     let live = true;
     (async () => {
-      const [list, count, regs, officeText, pulled] = await Promise.all([
+      const [list, count, registrations, officeText, pulled] = await Promise.all([
         repos.outbox.list(1000),
         repos.members.count(),
         repos.registrations.list(500),
@@ -157,7 +104,15 @@ export default function HomeTab() {
       if (!live) return;
       setItems(list);
       setMembers(count);
-      setRegistered(regs.filter((r) => r.status !== 'REJECTED').length);
+      setRegistered(registrations.filter((r) => r.status !== 'REJECTED').length);
+      setRegs(registrations);
+      const found: Record<string, Pick<Member, 'status'>> = {};
+      for (const r of registrations.filter((x) => x.serverId && x.capturedAt.slice(0, 10) === day())) {
+        const m = await repos.members.get(r.serverId!);
+        if (m) found[r.serverId!] = m;
+      }
+      if (!live) return;
+      setApproved(found);
       setPulledAt(pulled);
       try {
         setOffice(officeText ? (JSON.parse(officeText) as OfficeProfile) : null);
@@ -172,7 +127,13 @@ export default function HomeTab() {
 
   const figures = useMemo(() => computeHomeFigures(items, day()), [items]);
   const shown = range === 'today' ? figures.today : figures.allTime;
-  const recent = items.slice(0, 4);
+  // Today's activity: deposits and registrations together, latest first.
+  const today = day();
+  const entries: Entry[] = [
+    ...items.filter((i) => i.collectedAt.slice(0, 10) === today).map((deposit) => ({ at: deposit.collectedAt, key: deposit.localTransactionId, deposit })),
+    ...regs.filter((r) => r.capturedAt.slice(0, 10) === today).map((registration) => ({ at: registration.capturedAt, key: registration.localRegistrationId, registration })),
+  ].sort((a, b) => b.at.localeCompare(a.at));
+  const recent = entries.slice(0, 4);
   const name = session?.officerName ?? '';
 
   const refresh = async () => {
@@ -247,7 +208,7 @@ export default function HomeTab() {
       </View>
 
       {figures.needAttention > 0 ? (
-        <Tappable onPress={() => router.navigate('/sync')} label="Items need attention">
+        <Tappable onPress={() => router.push('/history')} label="Items need attention">
           <View style={{ flexDirection: 'row', alignItems: 'center', gap: 12, padding: 14, backgroundColor: colors.dangerBg, borderRadius: 16, ...RADIUS }}>
             <Ionicons name="alert-circle" size={22} color={colors.danger} />
             <Text style={{ flex: 1, color: colors.danger, fontWeight: '600' }}>
@@ -278,27 +239,39 @@ export default function HomeTab() {
         <StatTile icon="receipt-outline" label="Deposits, all time" value={String(figures.allTime.count)} />
       </View>
 
-      {/* Recent */}
+      {/* Today */}
       <View style={{ gap: 8 }}>
         <View style={{ flexDirection: 'row', alignItems: 'baseline', justifyContent: 'space-between', paddingHorizontal: 4 }}>
-          <Text style={{ fontSize: 20, fontWeight: '700', color: colors.text }}>Recent activity</Text>
-          {items.length > 0 ? (
-            <Pressable accessibilityRole="link" onPress={() => router.navigate('/sync')} hitSlop={10}>
-              <Text style={{ color: colors.primary, fontSize: 15, fontWeight: '500' }}>See all</Text>
-            </Pressable>
-          ) : null}
+          <View>
+            <Text style={{ fontSize: 20, fontWeight: '700', color: colors.text }}>Today</Text>
+            <Text style={{ fontSize: 13, color: colors.muted }}>{dayLabel(today)}</Text>
+          </View>
+          <Pressable accessibilityRole="link" onPress={() => router.push('/history')} hitSlop={10}>
+            <Text style={{ color: colors.primary, fontSize: 15, fontWeight: '500' }}>History</Text>
+          </Pressable>
         </View>
         <View style={{ backgroundColor: colors.card, borderRadius: 20, overflow: 'hidden', ...RADIUS, ...shadow }}>
           {recent.length === 0 ? (
             <View style={{ padding: 28, alignItems: 'center', gap: 8 }}>
-              <Ionicons name="cash-outline" size={32} color={colors.muted} />
-              <Text style={{ fontSize: 16, fontWeight: '600', color: colors.text }}>No deposits yet</Text>
-              <Text style={{ fontSize: 14, color: colors.muted, textAlign: 'center' }}>Deposits you record show up here, even before they reach the office.</Text>
+              <Ionicons name="today-outline" size={32} color={colors.muted} />
+              <Text style={{ fontSize: 16, fontWeight: '600', color: colors.text }}>Nothing recorded today</Text>
+              <Text style={{ fontSize: 14, color: colors.muted, textAlign: 'center' }}>Deposits and registrations you record today show up here, even before they reach the office.</Text>
             </View>
           ) : (
-            recent.map((item, i) => <ActivityRow key={item.localTransactionId} item={item} last={i === recent.length - 1} now={now} />)
+            recent.map((e, i) =>
+              e.deposit ? (
+                <DepositRow key={e.key} item={e.deposit} last={i === recent.length - 1} withDay={false} />
+              ) : (
+                <RegistrationRow key={e.key} item={e.registration!} member={e.registration!.serverId ? (approved[e.registration!.serverId] ?? null) : null} last={i === recent.length - 1} withDay={false} />
+              ),
+            )
           )}
         </View>
+        {entries.length > recent.length ? (
+          <Text style={{ fontSize: 13, color: colors.muted, paddingHorizontal: 4 }}>
+            {entries.length - recent.length} more today. Open History to see everything.
+          </Text>
+        ) : null}
       </View>
 
       {/* Sync */}

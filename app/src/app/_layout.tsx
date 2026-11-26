@@ -28,6 +28,7 @@ function Screens() {
         <Stack.Screen name="member/[code]" options={{ title: 'Member' }} />
         <Stack.Screen name="collect/[code]" options={{ title: 'Deposit' }} />
         <Stack.Screen name="register" options={{ title: 'Register member' }} />
+        <Stack.Screen name="history" options={{ title: 'Activity history', headerBackButtonDisplayMode: 'minimal' }} />
       </Stack.Protected>
     </Stack>
   );
