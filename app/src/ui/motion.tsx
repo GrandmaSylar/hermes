@@ -95,7 +95,7 @@ export function Dots({ color = colors.primary, size = 8 }: { color?: string; siz
 }
 
 /** Full-screen loader: a ring that breathes around the brand dot, with an optional line of text beneath. */
-export function BrandLoader({ size = 72 }: { size?: number }) {
+export function BrandLoader({ size = 72, children }: { size?: number; children?: React.ReactNode }) {
   const pulse = useRef(new Animated.Value(0)).current;
   useEffect(() => {
     const loop = Animated.loop(Animated.timing(pulse, { toValue: 1, duration: 1500, easing: Easing.out(Easing.quad), useNativeDriver: true }));
@@ -112,9 +112,9 @@ export function BrandLoader({ size = 72 }: { size?: number }) {
   return (
     <View accessibilityRole="progressbar" accessibilityLabel="Loading" style={{ width: size * 1.6, height: size * 1.6, alignItems: 'center', justifyContent: 'center' }}>
       {[0, 0.5].map((d) => (
-        <Animated.View key={d} style={[{ position: 'absolute', width: size, height: size, borderRadius: size / 2, borderWidth: 2, borderColor: colors.primary }, ring(d)]} />
+        <Animated.View key={d} style={[{ position: 'absolute', width: size, height: size, borderRadius: size / 2, borderWidth: 2, borderColor: d === 0 ? '#03305C' : '#EA3137' }, ring(d)]} />
       ))}
-      <View style={{ width: size * 0.5, height: size * 0.5, borderRadius: size * 0.25, backgroundColor: colors.primary }} />
+      {children ?? <View style={{ width: size * 0.5, height: size * 0.5, borderRadius: size * 0.25, backgroundColor: colors.primary }} />}
     </View>
   );
 }

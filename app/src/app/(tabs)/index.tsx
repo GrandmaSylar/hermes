@@ -12,6 +12,8 @@ import { useApp } from '@/state/AppProvider';
 import { KV_OFFICE, KV_PULLED_AT } from '@/sync/engine';
 import { DepositRow, RADIUS, RegistrationRow, Tappable, nums, shadow } from '@/ui/activity-rows';
 import { PressScale, Reveal, SkeletonRow } from '@/ui/motion';
+import { Watermark } from '@/ui/brand';
+import { brand, brandGradient } from '@/ui/colors';
 import { colors } from '@/ui/theme';
 
 type IconName = React.ComponentProps<typeof Ionicons>['name'];
@@ -184,12 +186,14 @@ export default function HomeTab() {
           padding: 20,
           gap: 16,
           borderRadius: 24,
-          backgroundColor: colors.primary,
-          experimental_backgroundImage: `linear-gradient(145deg, ${colors.primary}, ${colors.primaryDeep})`,
-          boxShadow: '0 8px 24px rgba(13, 71, 161, 0.28)',
+          backgroundColor: brand.navy,
+          overflow: 'hidden',
+          experimental_backgroundImage: brandGradient(145),
+          boxShadow: '0 8px 24px rgba(3, 48, 92, 0.32)',
           ...RADIUS,
         }}
       >
+        <Watermark size={220} />
         <Segmented value={range} onChange={setRange} />
         <View style={{ gap: 4 }}>
           <Text style={{ fontSize: 12, color: 'rgba(255,255,255,0.8)', fontWeight: '500' }}>Cash {range === 'today' ? 'today' : 'in total'}</Text>
