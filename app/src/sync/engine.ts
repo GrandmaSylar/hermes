@@ -46,7 +46,7 @@ export interface SyncDeps {
 
 const DAY_MS = 24 * 60 * 60 * 1000;
 const KV_CURSOR = 'members.cursor';
-const KV_PULLED_AT = 'members.pulledAt';
+export const KV_PULLED_AT = 'members.pulledAt';
 /** Highest member code pulled so far; members are listed in code order, so newer ones follow it. */
 const KV_MAX_CODE = 'members.maxCode';
 /** The core system's member list has no savings accounts, so they are pulled in a second stage. */
@@ -54,6 +54,7 @@ const KV_STAGE = 'pull.stage';
 const KV_ACCOUNTS_CURSOR = 'accounts.cursor';
 const KV_DECISIONS_SINCE = 'decisions.since';
 /** The member types the registration form offers, as last fetched (JSON). */
+export const KV_OFFICE = 'office.profile';
 export const KV_MEMBER_TYPES = 'registration.memberTypes';
 /** Look back this far before the last check, so a decision made while the phone was asking is not missed. */
 const DECISION_OVERLAP_MS = 10 * 60 * 1000;
@@ -205,6 +206,7 @@ async function refreshRegistration(deps: SyncDeps): Promise<void> {
   const { repos, api, session } = deps;
   try {
     await api.refreshCapabilities?.(session);
+    if (api.office) await repos.kv.set(KV_OFFICE, JSON.stringify(api.office));
     if (api.capabilities.registration) {
       const types = await api.memberTypes(session);
       if (types.length > 0) await repos.kv.set(KV_MEMBER_TYPES, JSON.stringify(types));

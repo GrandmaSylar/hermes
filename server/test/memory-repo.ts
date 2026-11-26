@@ -7,6 +7,7 @@ import type {
   AccountInfo,
   DepositInput,
   DepositKind,
+  BranchInfo,
   DepositRow,
   InsertOutcome,
   MemberConflict,
@@ -113,6 +114,10 @@ export class MemoryRepo implements Repo {
   }
   async getOfficer(id: string) {
     return this.officers.find((o) => o.id === id) ?? null;
+  }
+  branch: BranchInfo | null = { code: '001', name: 'Techiman Branch', city: 'Techiman', creditUnion: 'Test Credit Union' };
+  async getBranchInfo(_branchCode: string) {
+    return this.branch;
   }
   async listMembers(_branchCode: string, afterCode: number, limit: number) {
     return this.members

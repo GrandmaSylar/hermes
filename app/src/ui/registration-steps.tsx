@@ -1,5 +1,6 @@
 import { useMemo, useState } from 'react';
-import { ActivityIndicator, Image, Pressable, Text, View } from 'react-native';
+import DateTimePicker, { DateTimePickerAndroid, type DateTimePickerEvent } from '@react-native-community/datetimepicker';
+import { ActivityIndicator, Image, Platform, Pressable, Text, View } from 'react-native';
 import { captureKycFile, type CaptureSource } from '@/data/kyc-capture';
 import { citiesForRegion, REGIONS } from '@/domain/ghana-locations';
 import {
@@ -17,6 +18,7 @@ import {
   TRANSACTION_VOLUMES,
   beneficiaryTotal,
   formatDisplayDate,
+  parseDisplayDate,
   isFullName,
   isGhanaPhone,
   memberTypeHelp,
@@ -37,6 +39,33 @@ export interface StepProps {
   set: <K extends keyof RegistrationForm>(key: K, value: RegistrationForm[K]) => void;
   /** The message for one field, when the step was checked and it is wrong. */
   errorFor: (field: string) => string | null;
+}
+
+/** Opens the phone's own calendar to choose a date of birth, as an alternative to typing it. */
+function BirthDatePicker({ text, onPick }: { text: string; onPick: (display: string) => void }) {
+  const [iosOpen, setIosOpen] = useState(false);
+  const current = () => {
+    const iso = parseDisplayDate(text);
+    const d = iso ? new Date(`${iso}T12:00:00`) : new Date(1990, 0, 1, 12);
+    return Number.isNaN(d.getTime()) ? new Date(1990, 0, 1, 12) : d;
+  };
+  const chosen = (event: DateTimePickerEvent, date?: Date) => {
+    if (event.type !== 'set' || !date) return;
+    const pad = (n: number) => String(n).padStart(2, '0');
+    onPick(`${pad(date.getDate())}/${pad(date.getMonth() + 1)}/${date.getFullYear()}`);
+  };
+  const open = () => {
+    if (Platform.OS === 'android') DateTimePickerAndroid.open({ value: current(), mode: 'date', maximumDate: new Date(), onChange: chosen });
+    else setIosOpen((v) => !v);
+  };
+  return (
+    <View style={{ marginTop: -6, marginBottom: 14 }}>
+      <Pressable accessibilityRole="button" accessibilityLabel="Pick date of birth from calendar" onPress={open} style={{ alignSelf: 'flex-start', minHeight: 44, paddingHorizontal: 14, borderRadius: 10, borderWidth: 1, borderColor: colors.border, justifyContent: 'center', backgroundColor: colors.card }}>
+        <Text style={{ color: colors.primary, fontWeight: '600' }}>Pick from calendar</Text>
+      </Pressable>
+      {Platform.OS === 'ios' && iosOpen ? <DateTimePicker value={current()} mode="date" display="spinner" maximumDate={new Date()} onChange={chosen} /> : null}
+    </View>
+  );
 }
 
 // ---- documents (KYC) -----------------------------------------------------------
@@ -188,6 +217,7 @@ export function PersonalStep(
         maxLength={10}
         help={props.guardianNeeded ? 'Minor (under 18): guardian information required' : 'Enter date of birth. Minors (under 18) require guardian information.'}
       />
+      <BirthDatePicker text={props.dobText} onPick={props.onDobText} />
       <ChoiceField label="Gender" required value={form.sex} options={toOptions(SEXES)} onChange={(v) => set('sex', v)} error={errorFor('sex')} />
       <SelectField label="Marital Status" value={form.maritalStatus} options={toOptions(MARITAL_STATUSES)} onChange={(v) => set('maritalStatus', v)} />
       <TextField label="Registration Number" value={form.registrationNo} onChange={(v) => set('registrationNo', v)} maxLength={30} help="Optional registration number" />

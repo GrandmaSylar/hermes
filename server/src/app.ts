@@ -220,8 +220,10 @@ export function buildApp(deps: AppDeps): FastifyInstance {
   app.get('/v1/me', { preHandler: requireOfficer }, async (req) => {
     const officer = req.officer!;
     const pending = await repo.pendingTotals(officer.id);
+    const branch = await repo.getBranchInfo(officer.branchCode);
     return {
       officer: profile(officer),
+      branch,
       limits: config.limits,
       pendingApproval: pending,
       capabilities: { registration: registrationOn(), documents: documentsOn() },

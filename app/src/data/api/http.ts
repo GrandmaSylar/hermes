@@ -11,6 +11,7 @@ import {
   type MemberLookup,
   type MemberPage,
   type OfficeDecision,
+  type OfficeProfile,
   type PushItem,
   type PushRegistration,
   type PushResult,
@@ -164,6 +165,7 @@ export function mapMember(row: unknown, asOf: string, branchCode: string): Serve
 }
 
 export class HttpApi implements ApiClient {
+  office: OfficeProfile | null = null;
   readonly capabilities: ApiCapabilities = {
     otp: false,
     registration: false,
@@ -354,6 +356,10 @@ export class HttpApi implements ApiClient {
     const capabilities = asRecord(body.capabilities);
     this.capabilities.registration = capabilities.registration === true;
     this.capabilities.documents = capabilities.documents === true;
+    const branch = body.branch === null || body.branch === undefined ? null : asRecord(body.branch);
+    this.office = branch
+      ? { creditUnion: asText(branch.creditUnion), branchName: asText(branch.name), branchCode: asText(branch.code), city: asText(branch.city) }
+      : null;
   }
 
   async pushRegistrations(session: Session, items: PushRegistration[]): Promise<RegistrationResult[]> {

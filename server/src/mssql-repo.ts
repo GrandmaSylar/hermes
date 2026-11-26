@@ -5,6 +5,7 @@ import { originalReference, storedReference } from './reference';
 import type {
   AccountInfo,
   AccountOption,
+  BranchInfo,
   DepositInput,
   DepositKind,
   DepositRow,
@@ -134,6 +135,33 @@ export class MssqlRepo implements Repo {
          ORDER BY ${byStaff ? 'CASE WHEN EmployeeID = @u THEN 0 ELSE 1 END, ' : ''}FieldOfficerID`,
       );
     return result.recordset[0] ? this.officerFrom(result.recordset[0]) : null;
+  }
+
+  async getBranchInfo(branchCode: string): Promise<BranchInfo | null> {
+    if (!has(this.schema, 'Branch.Code') || !has(this.schema, 'Branch.Description')) return null;
+    const city = has(this.schema, 'Branch.City') ? 'City' : "'' AS City";
+    const hasHead = has(this.schema, 'Branch.IsHeadOffice');
+    const head = hasHead ? 'IsHeadOffice' : 'CAST(0 AS bit) AS IsHeadOffice';
+    try {
+      const result = await this.pool
+        .request()
+        .input('code', sql.VarChar(10), branchCode)
+        .query(`SELECT Code, Description, ${city}, ${head} FROM dbo.Branch WHERE LTRIM(RTRIM(Code)) = @code${hasHead ? ' OR IsHeadOffice = 1' : ''}`);
+      const text = (v: unknown) => String(v ?? '').trim();
+      const rows = result.recordset;
+      const own = rows.find((r) => text(r.Code) === branchCode);
+      const headOffice = rows.find((r) => r.IsHeadOffice === true);
+      if (!own && !headOffice) return null;
+      const branch = own ?? headOffice!;
+      return {
+        code: text(branch.Code),
+        name: text(branch.Description),
+        city: text(branch.City),
+        creditUnion: text((headOffice ?? branch).Description),
+      };
+    } catch {
+      return null;
+    }
   }
 
   async getOfficer(id: string): Promise<Officer | null> {
