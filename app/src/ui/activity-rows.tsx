@@ -1,6 +1,7 @@
 import { Ionicons } from '@expo/vector-icons';
 import { router } from 'expo-router';
-import { Pressable, Text, View } from 'react-native';
+import { Text, View } from 'react-native';
+import { PressScale } from '@/ui/motion';
 import { ghs } from '@/domain/home';
 import { STATUS_WORDS, depositStatus, registrationStatus, type HistoryStatus } from '@/domain/history';
 import { officeLine } from '@/domain/office';
@@ -30,15 +31,9 @@ const STATUS_COLOR: Record<HistoryStatus, { fg: string; bg: string }> = {
 
 export function Tappable(props: { onPress?: () => void; label: string; children: React.ReactNode; style?: object; disabled?: boolean }) {
   return (
-    <Pressable
-      accessibilityRole="button"
-      accessibilityLabel={props.label}
-      disabled={props.disabled || !props.onPress}
-      onPress={props.onPress}
-      style={({ pressed }) => [{ opacity: props.disabled ? 0.5 : pressed ? 0.7 : 1, transform: [{ scale: pressed ? 0.985 : 1 }] }, props.style]}
-    >
+    <PressScale accessibilityRole="button" accessibilityLabel={props.label} disabled={props.disabled || !props.onPress} onPress={props.onPress} scaleTo={0.985} haptic={false} style={props.style}>
       {props.children}
-    </Pressable>
+    </PressScale>
   );
 }
 

@@ -1,24 +1,10 @@
-import { ActivityIndicator, Pressable, StyleSheet, Text, TextInput, View, type TextInputProps } from 'react-native';
+import { useRef, useState } from 'react';
+import { Animated, Text, TextInput, View, type TextInputProps } from 'react-native';
 import type { OutboxStatus } from '@/domain/types';
+import { colors } from '@/ui/colors';
+import { Dots, PressScale } from '@/ui/motion';
 
-/** The office system's palette (cua-core): its blue, green, red and orange, on iOS-style grey grounds. */
-export const colors = {
-  bg: '#F2F4F8',
-  card: '#FFFFFF',
-  text: '#111827',
-  muted: '#6B7280',
-  border: '#E5E7EB',
-  primary: '#1976D2',
-  primaryDeep: '#0D47A1',
-  primarySoft: '#E3F0FC',
-  primaryText: '#FFFFFF',
-  danger: '#D32F2F',
-  dangerBg: '#FDE7E7',
-  ok: '#2E7D32',
-  okBg: '#E4F3E5',
-  warn: '#B45309',
-  warnBg: '#FFF1DB',
-};
+export { colors };
 
 export const STATUS_STYLE: Record<OutboxStatus, { label: string; fg: string; bg: string }> = {
   PENDING: { label: 'Waiting to sync', fg: colors.warn, bg: colors.warnBg },
@@ -27,6 +13,10 @@ export const STATUS_STYLE: Record<OutboxStatus, { label: string; fg: string; bg:
   REJECTED: { label: 'Rejected', fg: colors.danger, bg: colors.dangerBg },
   CONFLICT: { label: 'Needs attention', fg: colors.danger, bg: colors.dangerBg },
 };
+
+/** The look shared by every card and sheet. */
+export const RADIUS = { borderCurve: 'continuous' as const };
+export const SHADOW = { boxShadow: '0 1px 2px rgba(16, 24, 40, 0.06), 0 2px 8px rgba(16, 24, 40, 0.04)' };
 
 /** A balance for display, or a plain note when the core system does not supply it. */
 export function balanceText(value: string | null, format: (amount: string) => string): string {
@@ -38,42 +28,72 @@ export function Button(props: {
   onPress: () => void;
   disabled?: boolean;
   busy?: boolean;
-  variant?: 'primary' | 'secondary';
+  variant?: 'primary' | 'secondary' | 'danger';
 }) {
-  const secondary = props.variant === 'secondary';
+  const variant = props.variant ?? 'primary';
   const inactive = props.disabled || props.busy;
+  const filled = variant === 'primary';
+  const fg = filled ? colors.primaryText : variant === 'danger' ? colors.danger : colors.primary;
   return (
-    <Pressable
+    <PressScale
       accessibilityRole="button"
-      onPress={props.onPress}
+      accessibilityLabel={props.title}
+      accessibilityState={{ disabled: !!inactive, busy: !!props.busy }}
       disabled={inactive}
-      style={({ pressed }) => [
-        styles.button,
-        secondary ? styles.buttonSecondary : styles.buttonPrimary,
-        inactive && styles.buttonDisabled,
-        pressed && !inactive && { opacity: 0.85 },
-      ]}
+      onPress={props.onPress}
+      scaleTo={0.98}
+      style={{
+        minHeight: 54,
+        borderRadius: 16,
+        alignItems: 'center',
+        justifyContent: 'center',
+        paddingHorizontal: 20,
+        opacity: props.disabled && !props.busy ? 0.45 : 1,
+        backgroundColor: filled ? colors.primary : variant === 'danger' ? colors.dangerBg : colors.primarySoft,
+        ...RADIUS,
+        ...(filled && !inactive ? { boxShadow: '0 6px 16px rgba(25, 118, 210, 0.32)' } : {}),
+      }}
     >
-      {props.busy ? (
-        <ActivityIndicator color={secondary ? colors.primary : colors.primaryText} />
-      ) : (
-        <Text style={[styles.buttonText, secondary && { color: colors.primary }]}>{props.title}</Text>
-      )}
-    </Pressable>
+      {props.busy ? <Dots color={fg} size={7} /> : <Text style={{ color: fg, fontSize: 17, fontWeight: '700', letterSpacing: -0.2 }}>{props.title}</Text>}
+    </PressScale>
   );
 }
 
+/** A labelled text box: filled, rounded, with a ring that fades in when it has focus. */
 export function Field(props: TextInputProps & { label: string; error?: string | null }) {
-  const { label, error, style, ...rest } = props;
+  const { label, error, style, onFocus, onBlur, ...rest } = props;
+  const [focused, setFocused] = useState(false);
+  const ring = useRef(new Animated.Value(0)).current;
+  const to = (v: number) => Animated.timing(ring, { toValue: v, duration: 160, useNativeDriver: false }).start();
   return (
-    <View style={{ marginBottom: 14 }}>
-      <Text style={styles.label}>{label}</Text>
-      <TextInput
-        placeholderTextColor={colors.muted}
-        style={[styles.input, error ? { borderColor: colors.danger } : null, style]}
-        {...rest}
-      />
-      {error ? <Text style={styles.error}>{error}</Text> : null}
+    <View style={{ marginBottom: 16 }}>
+      <Text style={{ fontSize: 13, color: focused ? colors.primary : colors.muted, marginBottom: 6, fontWeight: '600', marginLeft: 2 }}>{label}</Text>
+      <Animated.View
+        style={{
+          borderRadius: 14,
+          borderWidth: 1.5,
+          backgroundColor: ring.interpolate({ inputRange: [0, 1], outputRange: ['#EEF1F6', '#FFFFFF'] }),
+          borderColor: error ? colors.danger : ring.interpolate({ inputRange: [0, 1], outputRange: ['#EEF1F6', colors.primary] }),
+          ...RADIUS,
+        }}
+      >
+        <TextInput
+          placeholderTextColor={colors.muted}
+          onFocus={(e) => {
+            setFocused(true);
+            to(1);
+            onFocus?.(e);
+          }}
+          onBlur={(e) => {
+            setFocused(false);
+            to(0);
+            onBlur?.(e);
+          }}
+          style={[{ minHeight: 52, paddingHorizontal: 14, fontSize: 17, color: colors.text }, style]}
+          {...rest}
+        />
+      </Animated.View>
+      {error ? <Text style={{ color: colors.danger, fontSize: 13, marginTop: 6, marginLeft: 2 }}>{error}</Text> : null}
     </View>
   );
 }
@@ -81,35 +101,28 @@ export function Field(props: TextInputProps & { label: string; error?: string | 
 export function StatusPill({ status }: { status: OutboxStatus }) {
   const s = STATUS_STYLE[status];
   return (
-    <View style={[styles.pill, { backgroundColor: s.bg }]}>
-      <Text style={[styles.pillText, { color: s.fg }]}>{s.label}</Text>
+    <View style={{ alignSelf: 'flex-start', borderRadius: 999, paddingHorizontal: 10, paddingVertical: 4, backgroundColor: s.bg }}>
+      <Text style={{ fontSize: 12, fontWeight: '700', color: s.fg }}>{s.label}</Text>
     </View>
   );
 }
 
-export function Card({ children }: { children: React.ReactNode }) {
-  return <View style={styles.card}>{children}</View>;
+export function Card({ children, style }: { children: React.ReactNode; style?: object }) {
+  return <View style={[{ backgroundColor: colors.card, borderRadius: 20, padding: 18, ...RADIUS, ...SHADOW }, style]}>{children}</View>;
 }
 
-const styles = StyleSheet.create({
-  button: { minHeight: 48, borderRadius: 10, alignItems: 'center', justifyContent: 'center', paddingHorizontal: 16 },
-  buttonPrimary: { backgroundColor: colors.primary },
-  buttonSecondary: { backgroundColor: colors.card, borderWidth: 1, borderColor: colors.primary },
-  buttonDisabled: { opacity: 0.5 },
-  buttonText: { color: colors.primaryText, fontSize: 16, fontWeight: '600' },
-  label: { fontSize: 13, color: colors.muted, marginBottom: 6, fontWeight: '500' },
-  input: {
-    minHeight: 48,
-    borderWidth: 1,
-    borderColor: colors.border,
-    borderRadius: 10,
-    paddingHorizontal: 12,
-    fontSize: 16,
-    color: colors.text,
-    backgroundColor: colors.card,
-  },
-  error: { color: colors.danger, fontSize: 13, marginTop: 6 },
-  pill: { alignSelf: 'flex-start', borderRadius: 999, paddingHorizontal: 10, paddingVertical: 4 },
-  pillText: { fontSize: 12, fontWeight: '600' },
-  card: { backgroundColor: colors.card, borderRadius: 12, padding: 16, borderWidth: 1, borderColor: colors.border },
-});
+/** A small capital heading above a group of cards, as in iOS settings. */
+export function SectionLabel({ children }: { children: React.ReactNode }) {
+  return <Text style={{ fontSize: 13, fontWeight: '700', color: colors.muted, letterSpacing: 0.6, marginLeft: 4, textTransform: 'uppercase' }}>{children}</Text>;
+}
+
+/** A round badge with a person's initials. */
+export function Avatar({ name, size = 56, tone = 'blue' }: { name: string; size?: number; tone?: 'blue' | 'soft' }) {
+  const letters = name.trim().split(/\s+/).slice(0, 2).map((w) => w[0]?.toUpperCase() ?? '').join('');
+  const soft = tone === 'soft';
+  return (
+    <View style={{ width: size, height: size, borderRadius: size / 2, backgroundColor: soft ? colors.primarySoft : colors.primary, alignItems: 'center', justifyContent: 'center' }}>
+      <Text style={{ color: soft ? colors.primaryDeep : colors.primaryText, fontSize: size * 0.36, fontWeight: '700' }}>{letters}</Text>
+    </View>
+  );
+}

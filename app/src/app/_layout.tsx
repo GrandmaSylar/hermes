@@ -14,20 +14,25 @@ function Screens() {
   return (
     <Stack
       screenOptions={{
-        headerStyle: { backgroundColor: colors.card },
-        headerTintColor: colors.text,
+        headerStyle: { backgroundColor: colors.bg },
+        headerShadowVisible: false,
+        headerTintColor: colors.primary,
+        headerTitleStyle: { color: colors.text, fontWeight: '700' },
+        headerBackButtonDisplayMode: 'minimal',
         contentStyle: { backgroundColor: colors.bg },
+        animation: 'slide_from_right',
+        animationDuration: 280,
       }}
     >
-      <Stack.Screen name="index" options={{ headerShown: false }} />
+      <Stack.Screen name="index" options={{ headerShown: false, animation: 'fade' }} />
       <Stack.Protected guard={!signedIn}>
         <Stack.Screen name="login" options={{ headerShown: false }} />
       </Stack.Protected>
       <Stack.Protected guard={signedIn}>
         <Stack.Screen name="(tabs)" options={{ headerShown: false }} />
         <Stack.Screen name="member/[code]" options={{ title: 'Member' }} />
-        <Stack.Screen name="collect/[code]" options={{ title: 'Deposit' }} />
-        <Stack.Screen name="register" options={{ title: 'Register member' }} />
+        <Stack.Screen name="collect/[code]" options={{ title: 'Deposit', animation: 'fade_from_bottom' }} />
+        <Stack.Screen name="register" options={{ title: 'Register member', animation: 'fade_from_bottom' }} />
         <Stack.Screen name="history" options={{ title: 'Activity history', headerBackButtonDisplayMode: 'minimal' }} />
       </Stack.Protected>
     </Stack>

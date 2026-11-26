@@ -1,48 +1,52 @@
+import { Ionicons } from '@expo/vector-icons';
 import { router, useLocalSearchParams } from 'expo-router';
 import { useEffect, useRef, useState } from 'react';
-import { ActivityIndicator, FlatList, Pressable, RefreshControl, Text, TextInput, View } from 'react-native';
+import { FlatList, RefreshControl, Text, TextInput, View } from 'react-native';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import type { Member } from '@/domain/types';
 import { useApp } from '@/state/AppProvider';
-import { colors } from '@/ui/theme';
+import { RADIUS, SHADOW } from '@/ui/theme';
+import { PressScale, Reveal, SkeletonRow } from '@/ui/motion';
+import { Avatar, Card, colors } from '@/ui/theme';
 
 const RESULT_LIMIT = 50;
 
-function MemberRow({ member }: { member: Member }) {
+function MemberRow({ member, index }: { member: Member; index: number }) {
+  const status = member.status === 'ACTIVE' ? null : member.status === 'INACTIVE' ? 'Inactive' : 'Pending approval';
   return (
-    <Pressable
-      onPress={() => router.push(`/member/${member.memberCode}`)}
-      style={({ pressed }) => ({
-        paddingVertical: 12,
-        paddingHorizontal: 16,
-        backgroundColor: pressed ? '#EEF2F6' : colors.card,
-        borderBottomWidth: 1,
-        borderBottomColor: colors.border,
-      })}
-    >
-      <View style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' }}>
-        <Text style={{ fontSize: 16, color: colors.text, fontWeight: '600', flexShrink: 1 }}>
-          {member.myCustomer ? '★ ' : ''}
-          {member.name}
-        </Text>
-        {member.status !== 'ACTIVE' ? (
-          <Text style={{ fontSize: 12, color: colors.warn }}>{member.status === 'INACTIVE' ? 'Inactive' : 'Pending approval'}</Text>
-        ) : null}
-      </View>
-      <Text style={{ color: colors.muted, marginTop: 2 }}>
-        {member.memberCode} · {member.phone}
-      </Text>
-    </Pressable>
+    <Reveal index={index} from={10}>
+      <PressScale accessibilityRole="button" accessibilityLabel={`${member.name}, ${member.memberCode}`} onPress={() => router.push(`/member/${member.memberCode}`)} scaleTo={0.985} haptic={false}>
+        <View style={{ flexDirection: 'row', alignItems: 'center', gap: 12, padding: 14, backgroundColor: colors.card, borderRadius: 18, ...RADIUS, ...SHADOW }}>
+          <Avatar name={member.name} size={46} tone="soft" />
+          <View style={{ flex: 1, gap: 2 }}>
+            <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6 }}>
+              <Text numberOfLines={1} style={{ flexShrink: 1, fontSize: 16, color: colors.text, fontWeight: '700' }}>{member.name}</Text>
+              {member.myCustomer ? <Ionicons name="star" size={14} color="#F5A623" /> : null}
+            </View>
+            <Text numberOfLines={1} style={{ color: colors.muted, fontSize: 13 }}>{member.memberCode} · {member.phone}</Text>
+            {status ? (
+              <View style={{ alignSelf: 'flex-start', marginTop: 4, paddingHorizontal: 8, paddingVertical: 2, borderRadius: 999, backgroundColor: colors.warnBg }}>
+                <Text style={{ fontSize: 11, fontWeight: '700', color: colors.warn }}>{status}</Text>
+              </View>
+            ) : null}
+          </View>
+          <Ionicons name="chevron-forward" size={18} color="#C4C9D4" />
+        </View>
+      </PressScale>
+    </Reveal>
   );
 }
 
 export default function MembersTab() {
   const { repos, version, syncing, syncNow } = useApp();
   const { mode } = useLocalSearchParams<{ mode?: string }>();
+  const insets = useSafeAreaInsets();
   const [note, setNote] = useState('');
   const [query, setQuery] = useState('');
   const [debounced, setDebounced] = useState('');
-  const [results, setResults] = useState<Member[]>([]);
+  const [results, setResults] = useState<Member[] | null>(null);
   const [total, setTotal] = useState(0);
+  const [focused, setFocused] = useState(false);
   const requestId = useRef(0);
 
   // Wait briefly after typing stops, so each keystroke does not query the database.
@@ -72,7 +76,7 @@ export default function MembersTab() {
     })();
   }, [repos, debounced, version]);
 
-  // Pull down or tap the round button: sends waiting items, then re-downloads every member and balance.
+  // Pull down: sends waiting items, then re-downloads every member and balance.
   const refresh = async () => {
     if (syncing) return;
     setNote('');
@@ -80,27 +84,50 @@ export default function MembersTab() {
     if (report?.offline) setNote('No connection. Showing what is on this phone.');
   };
 
+  const searching = debounced.trim() !== '';
+
   return (
-    <View style={{ flex: 1 }}>
-      <FlatList
-        refreshControl={<RefreshControl refreshing={syncing} onRefresh={refresh} />}
-        data={results}
-        keyExtractor={(m) => m.memberCode}
-        renderItem={({ item }) => <MemberRow member={item} />}
-        keyboardShouldPersistTaps="handled"
-        initialNumToRender={12}
-        windowSize={7}
-        ListHeaderComponent={
-          <View style={{ padding: 16, gap: 12 }}>
-            {mode === 'deposit' ? (
-              <View style={{ backgroundColor: colors.primarySoft, borderRadius: 12, padding: 12 }}>
-                <Text style={{ color: colors.primaryDeep, fontWeight: '600' }}>Choose the member who is paying in</Text>
-                <Text style={{ color: colors.primaryDeep, fontSize: 13, marginTop: 2 }}>Search below, then tap their name to start the deposit.</Text>
+    <FlatList
+      refreshControl={<RefreshControl refreshing={syncing} onRefresh={refresh} tintColor={colors.primary} />}
+      data={results ?? []}
+      keyExtractor={(m) => m.memberCode}
+      renderItem={({ item, index }) => <MemberRow member={item} index={index} />}
+      keyboardShouldPersistTaps="handled"
+      initialNumToRender={12}
+      windowSize={7}
+      style={{ backgroundColor: colors.bg }}
+      contentContainerStyle={{ paddingTop: insets.top + 12, paddingHorizontal: 16, paddingBottom: 32, gap: 10 }}
+      ListHeaderComponent={
+        <View style={{ gap: 14, marginBottom: 6 }}>
+          <Text style={{ fontSize: 34, fontWeight: '800', color: colors.text, letterSpacing: -0.6 }}>{mode === 'deposit' ? 'Take a deposit' : 'Members'}</Text>
+          {mode === 'deposit' ? (
+            <Reveal>
+              <View style={{ flexDirection: 'row', gap: 10, alignItems: 'center', backgroundColor: colors.primarySoft, borderRadius: 16, padding: 14, ...RADIUS }}>
+                <Ionicons name="cash-outline" size={22} color={colors.primaryDeep} />
+                <Text style={{ flex: 1, color: colors.primaryDeep, fontWeight: '600' }}>Choose the member who is paying in, then tap their name.</Text>
               </View>
-            ) : null}
+            </Reveal>
+          ) : null}
+          <View
+            style={{
+              flexDirection: 'row',
+              alignItems: 'center',
+              gap: 8,
+              minHeight: 50,
+              paddingHorizontal: 14,
+              borderRadius: 14,
+              backgroundColor: focused ? colors.card : '#E8ECF2',
+              borderWidth: 1.5,
+              borderColor: focused ? colors.primary : 'transparent',
+              ...RADIUS,
+            }}
+          >
+            <Ionicons name="search" size={18} color={colors.muted} />
             <TextInput
               value={query}
               onChangeText={setQuery}
+              onFocus={() => setFocused(true)}
+              onBlur={() => setFocused(false)}
               placeholder="Name, member no., phone or account no."
               placeholderTextColor={colors.muted}
               autoFocus={mode === 'deposit'}
@@ -108,64 +135,38 @@ export default function MembersTab() {
               autoCapitalize="none"
               returnKeyType="search"
               clearButtonMode="while-editing"
-              style={{
-                minHeight: 48,
-                borderWidth: 1,
-                borderColor: colors.border,
-                borderRadius: 10,
-                paddingHorizontal: 12,
-                fontSize: 16,
-                backgroundColor: colors.card,
-                color: colors.text,
-              }}
+              style={{ flex: 1, fontSize: 16, color: colors.text, minHeight: 48 }}
             />
-            {note ? <Text style={{ color: colors.warn, fontSize: 13 }}>{note}</Text> : null}
-            <Text style={{ color: colors.muted, fontSize: 12 }}>
-              {debounced.trim() === ''
-                ? `My customers and frequent members · ${total.toLocaleString()} members on this phone`
-                : `${results.length}${results.length === RESULT_LIMIT ? '+' : ''} found`}
-            </Text>
           </View>
-        }
-        ListEmptyComponent={
-          <Text style={{ color: colors.muted, textAlign: 'center', padding: 32 }}>
-            {total === 0
-              ? 'No members yet. Connect to the network and sync.'
-              : debounced.trim() === ''
-                ? 'Search for a member, then tap ★ on their page to add them to My customers.'
-                : 'No member matches.'}
+          {note ? <Text style={{ color: colors.warn, fontSize: 13 }}>{note}</Text> : null}
+          <Text style={{ color: colors.muted, fontSize: 13, marginLeft: 4 }}>
+            {results === null
+              ? 'Loading members…'
+              : !searching
+                ? `My customers and frequent members · ${total.toLocaleString()} on this phone`
+                : `${results.length}${results.length === RESULT_LIMIT ? '+' : ''} found`}
           </Text>
-        }
-      />
-      <Pressable
-        accessibilityRole="button"
-        accessibilityLabel="Refresh"
-        onPress={refresh}
-        disabled={syncing}
-        style={({ pressed }) => ({
-          position: 'absolute',
-          right: 20,
-          bottom: 24,
-          width: 56,
-          height: 56,
-          borderRadius: 28,
-          alignItems: 'center',
-          justifyContent: 'center',
-          backgroundColor: colors.primary,
-          opacity: pressed || syncing ? 0.85 : 1,
-          elevation: 6,
-          shadowColor: '#000',
-          shadowOpacity: 0.25,
-          shadowRadius: 6,
-          shadowOffset: { width: 0, height: 3 },
-        })}
-      >
-        {syncing ? (
-          <ActivityIndicator color={colors.primaryText} />
-        ) : (
-          <Text style={{ color: colors.primaryText, fontSize: 26, lineHeight: 30 }}>↻</Text>
-        )}
-      </Pressable>
-    </View>
+          {results === null ? (
+            <Card style={{ padding: 0, overflow: 'hidden' }}>
+              {[0, 1, 2, 3].map((i) => <SkeletonRow key={i} />)}
+            </Card>
+          ) : null}
+        </View>
+      }
+      ListEmptyComponent={
+        results === null ? undefined : (
+          <Card style={{ alignItems: 'center', gap: 8, paddingVertical: 32 }}>
+            <Ionicons name={total === 0 ? 'cloud-offline-outline' : 'search-outline'} size={32} color={colors.muted} />
+            <Text style={{ color: colors.muted, textAlign: 'center' }}>
+              {total === 0
+                ? 'No members yet. Connect to the network and sync.'
+                : !searching
+                  ? 'Search for a member, then tap the star on their page to add them to My customers.'
+                  : 'No member matches.'}
+            </Text>
+          </Card>
+        )
+      }
+    />
   );
 }
